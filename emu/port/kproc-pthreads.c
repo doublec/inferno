@@ -11,8 +11,6 @@
 #include	<errno.h>
 #include	<semaphore.h>
 
-//#define getup infgetup
-
 typedef struct Osdep Osdep;
 struct Osdep {
 	sem_t	sem;
