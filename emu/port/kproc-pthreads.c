@@ -11,6 +11,8 @@
 #include	<errno.h>
 #include	<semaphore.h>
 
+//#define getup infgetup
+
 typedef struct Osdep Osdep;
 struct Osdep {
 	sem_t	sem;
@@ -22,7 +24,7 @@ static pthread_key_t  prdakey;
 extern int dflag;
 
 Proc*
-getup(void)
+infgetup(void)
 {
 	return pthread_getspecific(prdakey);
 }
@@ -151,8 +153,8 @@ kproc(char *name, void (*func)(void*), void *arg, int flags)
 		pthread_attr_setstacksize(&attr, 512*1024);	/* could be a parameter */
 	else if(KSTACK > 0)
 		pthread_attr_setstacksize(&attr, KSTACK);
-	pthread_attr_setinheritsched(&attr, PTHREAD_INHERIT_SCHED);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	//pthread_attr_setinheritsched(&attr, PTHREAD_INHERIT_SCHED);
+	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	if(pthread_create(&thread, &attr, tramp, p))
 		panic("thr_create failed\n");
 	pthread_attr_destroy(&attr);
@@ -202,6 +204,7 @@ osyield(void)
 {
 //	pthread_yield_np();
 	/* define pthread_yield to be sched_yield or pthread_yield_np if required */
+#define pthread_yield sched_yield
 	pthread_yield();
 }
 

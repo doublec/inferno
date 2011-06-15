@@ -9,7 +9,7 @@
 
 #include	<sys/types.h>
 #include	<sys/stat.h>
-#include	<sys/fcntl.h>
+#include	<fcntl.h>
 #include	<sys/socket.h>
 #include	<sys/un.h>
 #include	<utime.h>
@@ -791,7 +791,9 @@ fsdirread(Chan *c, uchar *va, int count, vlong offset)
 	fspath(FS(c)->name, "", path);
 	ep = path+strlen(path);
 	if(FS(c)->offset != offset) {
-		seekdir(FS(c)->dir, 0);
+		closedir(FS(c)->dir);
+		FS(c)->dir = opendir(FS(c)->name->s);
+		//seekdir(FS(c)->dir, 0);
 		FS(c)->de = nil;
 		FS(c)->eod = 0;
 		for(n=0; n<offset; ) {

@@ -56,6 +56,7 @@ extern double floor(double);
 extern double __ieee754_fmod(double, double);
 extern double __ieee754_hypot(double, double);
 extern int ilogb(double);
+#undef isnan
 extern int isnan(double);
 extern double __ieee754_j0(double);
 extern double __ieee754_j1(double);

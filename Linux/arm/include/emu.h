@@ -24,6 +24,7 @@ static __inline Proc *getup(void) {
 	return *(Proc **)((uintptr)p & ~(KSTACK - 1));
 };
 #else
+#define getup infgetup
 extern	Proc*	getup(void);
 #endif
 

@@ -8,17 +8,17 @@ OS=		o
 AR=		ar
 ARFLAGS=	ruvs
 
-AS=		arm-gcc -c 
+AS=		agcc -c 
 ASFLAGS=
 
-CC=		arm-gcc -c 
+CC=		agcc -c 
 CFLAGS=		-O\
 		-I$ROOT/Linux/arm/include\
 		-I$ROOT/include\
 		-DLINUX_ARM
 
 ANSICPP=
-LD=		arm-gcc 
+LD=		agcc 
 LDFLAGS=	
 
 SYSLIBS=

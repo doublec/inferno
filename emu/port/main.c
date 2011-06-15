@@ -267,6 +267,7 @@ emuinit(void *imod)
 
 	e = up->env;
 	e->pgrp = newpgrp();
+	printf("up = %p\n", up);
 	e->fgrp = newfgrp(nil);
 	e->egrp = newegrp();
 	e->errstr = e->errbuf0;

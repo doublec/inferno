@@ -23,6 +23,7 @@
 #include <endian.h>
 
 #define	getwd	infgetwd
+#define	strdup	infstrdup
 
 #ifndef EMU
 typedef struct Proc Proc;
@@ -37,6 +38,8 @@ typedef struct Proc Proc;
 
 typedef unsigned char	uchar;
 typedef signed char	schar;
+typedef unsigned short  ushort;
+typedef unsigned long   ulong;
 typedef unsigned short	Rune;
 typedef long long int	vlong;
 typedef unsigned long long int	uvlong;

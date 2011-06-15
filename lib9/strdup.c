@@ -1,7 +1,7 @@
 #include "lib9.h"
 
 char*
-strdup(const char *s) 
+infstrdup(const char *s) 
 {  
 	char *os;
 

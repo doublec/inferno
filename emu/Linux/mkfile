@@ -4,7 +4,7 @@ SYSTARG=Linux
 
 #Configurable parameters
 
-CONF=emu			#default configuration
+CONF=emu-g			#default configuration
 CONFLIST=emu
 CLEANCONFLIST=
 
@@ -20,7 +20,8 @@ X11LIBS= -lX11 -lXext	# can remove or override using env section in config files
 
 OBJ=\
 	asm-$OBJTYPE.$O\
-	os.$O\
+	osp.$O\
+	kproc-pthreads.$O\
 	segflush-$OBJTYPE.$O\
 	$CONF.root.$O\
 	lock.$O\
@@ -32,8 +33,8 @@ LIBNAMES=${LIBS:%=lib%.a}
 
 HFILES=\
 
-CFLAGS='-DROOT="'$ROOT'"' -DEMU -I. -I../port -I$ROOT/$SYSTARG/$OBJTYPE/include -I$ROOT/include -I$ROOT/libinterp $CTHREADFLAGS $CFLAGS $EMUOPTIONS
-SYSLIBS= $X11LIBS -lm -lrt -lpthread
+CFLAGS='-DROOT="'$ROOT'"' -DUSE_PTHREADS -DEMU -I. -I../port -I$ROOT/$SYSTARG/$OBJTYPE/include -I$ROOT/include -I$ROOT/libinterp $CTHREADFLAGS $CFLAGS $EMUOPTIONS
+SYSLIBS= $X11LIBS -lm #-lpthread
 KERNDATE=`{$NDATE}
 
 default:V:	$O.$CONF

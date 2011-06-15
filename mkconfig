@@ -4,7 +4,7 @@
 #	They are almost always the same.
 
 #	On Nt systems, the ROOT path MUST be of the form `drive:/path'
-ROOT=/usr/inferno
+ROOT=/data/inferno
 
 #
 #	Specify the flavour of Tk (std for standard builds)
@@ -14,7 +14,7 @@ TKSTYLE=std
 #
 #	Except for building kernels, SYSTARG must always be the same as SYSHOST
 #
-SYSHOST=Plan9		# build system OS type (Hp, Inferno, Irix, Linux, MacOSX, Nt, Plan9, Solaris)
+SYSHOST=Linux		# build system OS type (Hp, Inferno, Irix, Linux, MacOSX, Nt, Plan9, Solaris)
 SYSTARG=$SYSHOST		# target system OS type (Hp, Inferno, Irix, Linux, Nt, Plan9, Solaris)
 
 #
@@ -22,7 +22,8 @@ SYSTARG=$SYSHOST		# target system OS type (Hp, Inferno, Irix, Linux, Nt, Plan9, 
 #	environment; for other systems it is usually just hard-coded
 #
 #OBJTYPE=386			# target system object type (eg, 386, arm, mips, power, s800, sparc)
-OBJTYPE=$objtype
+#OBJTYPE=$objtype
+OBJTYPE=arm
 
 #
 #	no changes required beyond this point

@@ -20,8 +20,8 @@
 #include	<raise.h>
 
 /* glibc 2.3.3-NTPL messes up getpid() by trying to cache the result, so we'll do it ourselves */
-#include	<sys/syscall.h>
-#define	getpid()	syscall(SYS_getpid)
+//#include	<sys/syscall.h>
+//#define	getpid()	syscall(SYS_getpid)
 
 /* temporarily suppress CLONE_PTRACE so it works on broken Linux kernels */
 #undef CLONE_PTRACE

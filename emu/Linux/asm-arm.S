@@ -1,5 +1,5 @@
 	.file	"asm-Linux-arm.S"
-#include "syscall.h"
+#include "sys/linux-syscalls.h"
 	.text
 
 /*
@@ -27,7 +27,7 @@ executeonnewstack:
 
         /* if we return here, tramp didn't do it's job */
 	mov	r0, #0
-	mov	r7, #SYS_exit
+//	mov	r7, #SYS_exit
 	swi	0x0
         ldmea   fp, {fp, sp, pc}
         .size   executeonnewstack, .-executeonnewstack
@@ -49,7 +49,7 @@ unlockandexit:
         mov     r1, #0
         str     r1, [r0]
 	mov	r0, #0
-	mov	r7, #SYS_exit
+//	mov	r7, #SYS_exit
 	swi	0x0
         ldmea   fp, {fp, sp, pc}
         .size   unlockandexit, .-unlockandexit

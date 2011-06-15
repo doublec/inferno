@@ -214,6 +214,7 @@ libinit(char *imod)
 	else
 		print("cannot getpwuid\n");
 
+	print("p= %p, p->env = %p\n", p, p->env);
 	p->env->uid = getuid();
 	p->env->gid = getgid();
 
