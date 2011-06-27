@@ -23,6 +23,7 @@ OBJ=\
 	osp.$O\
 	kproc-pthreads.$O\
 	segflush-$OBJTYPE.$O\
+	framebuffer.$O\
 	$CONF.root.$O\
 	lock.$O\
 	$DEVS\

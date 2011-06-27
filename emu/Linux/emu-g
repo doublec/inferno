@@ -16,6 +16,10 @@ dev
 	cmd	cmd
 	indir
 
+	draw	screen
+	pointer
+#	snarf
+
 	ip	ipif6-posix ipaux
 	eia
 #	audio	audio
@@ -23,7 +27,13 @@ dev
 
 lib
 	interp
+	tk
+	freetype
 	math
+	draw	screen
+
+	memlayer
+	memdraw
 	keyring
 	sec
 	mp
@@ -34,12 +44,16 @@ link
 
 mod
 	sys
+	draw
+
+	tk
 	math
 	srv	srv
 	keyring
 	crypt
 	ipints
 	loader
+	freetype
 
 port
 	alloc
@@ -69,8 +83,8 @@ port
 	uqid
 
 code
-	void setpointer(int x, int y){USED(x); USED(y);}
-	ulong strtochan(char *s){USED(s); return ~0;}
+#	void setpointer(int x, int y){USED(x); USED(y);}
+#	ulong strtochan(char *s){USED(s); return ~0;}
 
 init
 	emuinit

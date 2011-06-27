@@ -6,7 +6,7 @@
 
 #include "emu-g.root.h"
 
-ulong ndevs = 25;
+ulong ndevs = 27;
 
 extern Dev rootdevtab;
 extern Dev consdevtab;
@@ -22,6 +22,8 @@ extern Dev capdevtab;
 extern Dev fsdevtab;
 extern Dev cmddevtab;
 extern Dev indirdevtab;
+extern Dev drawdevtab;
+extern Dev pointerdevtab;
 extern Dev ipdevtab;
 extern Dev eiadevtab;
 extern Dev memdevtab;
@@ -40,6 +42,8 @@ Dev* devtab[]={
 	&fsdevtab,
 	&cmddevtab,
 	&indirdevtab,
+	&drawdevtab,
+	&pointerdevtab,
 	&ipdevtab,
 	&eiadevtab,
 	&memdevtab,
@@ -58,23 +62,27 @@ void links(void){
 }
 
 extern void sysmodinit(void);
+extern void drawmodinit(void);
+extern void tkmodinit(void);
 extern void mathmodinit(void);
 extern void srvmodinit(void);
 extern void keyringmodinit(void);
 extern void cryptmodinit(void);
 extern void ipintsmodinit(void);
 extern void loadermodinit(void);
+extern void freetypemodinit(void);
 void modinit(void){
 	sysmodinit();
+	drawmodinit();
+	tkmodinit();
 	mathmodinit();
 	srvmodinit();
 	keyringmodinit();
 	cryptmodinit();
 	ipintsmodinit();
 	loadermodinit();
+	freetypemodinit();
 }
 
-	void setpointer(int x, int y){USED(x); USED(y);}
-	ulong strtochan(char *s){USED(s); return ~0;}
 char* conffile = "emu-g";
 ulong kerndate = KERNDATE;

@@ -610,6 +610,7 @@ nrand(int n)
 	randn = randn*1103515245 + 12345 + osusectime();
 	return (randn>>16) % n;
 }
+
 /*
 int
 rand(void)
@@ -618,6 +619,7 @@ rand(void)
 	return randn;
 }
 */
+
 ulong
 truerand(void)
 {

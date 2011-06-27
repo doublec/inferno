@@ -73,6 +73,14 @@ mousetrack(int b, int x, int y, int isdelta)
 		x += mouse.v.x;
 		y += mouse.v.y;
 	}
+	if(x < 0)
+		x = 0;
+	else if (x > Xsize)
+		x = Xsize;
+	if(y < 0)
+		y = 0;
+	else if (y > Ysize)
+		y = Ysize;
 	msec = osmillisec();
 	if(0 && b && (mouse.v.b ^ b)&0x1f){
 		if(msec - mouse.v.msec < 300 && mouse.lastb == b
@@ -100,7 +108,7 @@ mousetrack(int b, int x, int y, int isdelta)
 	ptrq.put++;
 	Wakeup(&ptrq.r);
 /*	drawactive(1);	*/
-/*	setpointer(x, y); */
+	setpointer(x, y); 
 }
 
 static int
@@ -227,6 +235,8 @@ pointerread(Chan* c, void* a, long n, vlong off)
 	return n;
 }
 
+extern void drawPointer(int, int);
+
 static long
 pointerwrite(Chan* c, void* va, long n, vlong off)
 {
@@ -251,6 +261,8 @@ pointerwrite(Chan* c, void* va, long n, vlong off)
 		else
 			b = mouse.v.b;
 		/*mousetrack(b, x, y, msec);*/
+		mouse.v.x = x;
+		mouse.v.y = y;
 		setpointer(x, y);
 		USED(b);
 		break;
@@ -262,7 +274,8 @@ pointerwrite(Chan* c, void* va, long n, vlong off)
 		 */
 		if(n == 0){
 			cur.data = nil;
-			drawcursor(&cur);
+			//drawcursor(&cur);
+			drawPointer(cur.hotx, cur.hoty);
 			break;
 		}
 		if(n < 8)
@@ -276,7 +289,8 @@ pointerwrite(Chan* c, void* va, long n, vlong off)
 		if(cur.maxx%8 != 0 || cur.maxy%2 != 0 || n-4*4 != (cur.maxx/8 * cur.maxy))
 			error(Ebadarg);
 		cur.data = (uchar*)va + 4*4;
-		drawcursor(&cur);
+		//drawcursor(&cur);
+		drawPointer(cur.hotx, cur.hoty);
 		break;
 	default:
 		error(Ebadusefd);
