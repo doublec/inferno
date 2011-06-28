@@ -275,7 +275,7 @@ pointerwrite(Chan* c, void* va, long n, vlong off)
 		if(n == 0){
 			cur.data = nil;
 			//drawcursor(&cur);
-			drawPointer(cur.hotx, cur.hoty);
+			//drawPointer(cur.hotx, cur.hoty);
 			break;
 		}
 		if(n < 8)

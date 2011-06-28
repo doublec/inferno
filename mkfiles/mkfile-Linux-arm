@@ -15,7 +15,8 @@ CC=		agcc -c
 CFLAGS=		-O\
 		-I$ROOT/Linux/arm/include\
 		-I$ROOT/include\
-		-DLINUX_ARM
+		-DLINUX_ARM\
+		-DINFERNO
 
 ANSICPP=
 LD=		agcc 

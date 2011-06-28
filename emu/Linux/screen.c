@@ -75,15 +75,11 @@ touchscreen(struct input_event* ev, int count)
 				}
 				break;
 			case EV_SYN:
-				print("touch = %d, b = %d, lastb = %d\n", touch, b, lastb);
 				if (i == 2) {
-					print("just moving\n");
 					mousetrack(b, x, y, 0);
 				} else if (i > 2 && touch) {
-					print("clicky\n");
 					mousetrack(b, x, y, 0);
 				} else if (!touch && lastb) {
-					print("unclicky\n");
 					mousetrack(b, x, y, 0);
 				}
 //				if (i==2 && p>0)		// motion
@@ -108,15 +104,7 @@ while (1){
       if ((rd = read (eventfd, ev, sizeof(ev))) < size)
           //perror_exit ("read()");     
 	print("gaaack\n");
- 
-      //value = ev[0].value;
- 
 
-      for (i = 0; i < rd / size; i++) {
-
-      	print("Type = %d, Code = %d, Value = %d\n", ev[i].type, (ev[i].code), ev[i].value);
-      }
-	print("read rd/size = %d\n", rd / size);
 	touchscreen(ev, (rd / size));
   }
 }
