@@ -68,12 +68,18 @@ touchscreen(struct input_event* ev, int count)
 				case 0x36:		// ABS_MT_POSITION_X
 					//if (touch && lastval == 0)
 					if (lastval == 0)
-						x = ev[i].value;
+						if (ev[i].value > 8)
+							x = ev[i].value - 7;
+						else
+							x = 1;
 					break;
 				case 0x35:		//ABS_MT_POSITION_Y
 					//if (touch && lastval == 0)
 					if (lastval == 0)
-						y = Ysize-ev[i].value;
+						if (Ysize-ev[i].value > 12)
+							y = Ysize-ev[i].value - 11;
+						else
+							y = 1;
 					break;
 				}
 				break;
