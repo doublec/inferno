@@ -1,0 +1,225 @@
+char*	yytoknames[] =
+{
+	"$end",
+	"error",
+	"$unk",
+	" |",
+	" ^",
+	" &",
+	" <",
+	" >",
+	" +",
+	" -",
+	" *",
+	" /",
+	" %",
+	"LTYPE1",
+	"LTYPE2",
+	"LTYPE3",
+	"LTYPE4",
+	"LTYPE5",
+	"LTYPE6",
+	"LTYPE7",
+	"LTYPE8",
+	"LTYPE9",
+	"LTYPEA",
+	"LTYPEB",
+	"LCONST",
+	"LSP",
+	"LSB",
+	"LFP",
+	"LPC",
+	"LTOS",
+	"LAREG",
+	"LDREG",
+	"LFREG",
+	"LFCONST",
+	"LSCONST",
+	"LNAME",
+	"LLAB",
+	"LVAR",
+	" :",
+	" ;",
+	" =",
+	" ,",
+	" (",
+	" )",
+	" $",
+	" ~",
+};
+char*	yystates[] =
+{
+	0, /*0*/
+	"$accept:  prog.$end \nprog:  prog.line \n", /*1*/
+	0, /*2*/
+	"line:  LLAB.: $$3 line \n", /*3*/
+	"line:  LNAME.: $$5 line \ninst:  LNAME.= expr \n", /*4*/
+	0, /*5*/
+	"line:  inst.; \n", /*6*/
+	"line:  error.; \n", /*7*/
+	"inst:  LVAR.= expr \n", /*8*/
+	"inst:  LTYPE1.gengen \n", /*9*/
+	0, /*10*/
+	"inst:  LTYPE3.dstgen \n", /*11*/
+	"inst:  LTYPE4.spec1 \n", /*12*/
+	"inst:  LTYPE5.srcgen \n", /*13*/
+	"inst:  LTYPE6.dstrel \n", /*14*/
+	"inst:  LTYPE7.genrel \n", /*15*/
+	"inst:  LTYPE8.dstgen \ninst:  LTYPE8.gengen \n", /*16*/
+	0, /*17*/
+	"inst:  LTYPEA.spec2 \n", /*18*/
+	"inst:  LTYPEB.spec3 \n", /*19*/
+	0, /*20*/
+	0, /*21*/
+	"inst:  LNAME =.expr \n", /*22*/
+	0, /*23*/
+	0, /*24*/
+	"inst:  LVAR =.expr \n", /*25*/
+	0, /*26*/
+	"gengen:  gen., gen \n", /*27*/
+	0, /*28*/
+	"gen:  $.con \ngen:  $.name \ngen:  $.LSCONST \ngen:  $.LFCONST \ngen:  $.- LFCONST \n", /*29*/
+	0, /*30*/
+	0, /*31*/
+	"gen:  -.( LAREG ) \ncon:  -.con \n", /*32*/
+	"gen:  (.LAREG ) + \nareg:  (.LAREG ) \nareg:  (.) \ncon:  (.expr ) \n", /*33*/
+	0, /*34*/
+	0, /*35*/
+	0, /*36*/
+	0, /*37*/
+	0, /*38*/
+	"con:  +.con \n", /*39*/
+	"con:  ~.con \n", /*40*/
+	0, /*41*/
+	0, /*42*/
+	0, /*43*/
+	0, /*44*/
+	0, /*45*/
+	0, /*46*/
+	0, /*47*/
+	0, /*48*/
+	"dstgen:  ,.gen \n", /*49*/
+	0, /*50*/
+	"spec1:  gen./ con , gen \n", /*51*/
+	0, /*52*/
+	0, /*53*/
+	0, /*54*/
+	0, /*55*/
+	"dstrel:  ,.rel \n", /*56*/
+	"rel:  con.( LPC ) \n", /*57*/
+	0, /*58*/
+	0, /*59*/
+	"con:  -.con \n", /*60*/
+	"con:  (.expr ) \n", /*61*/
+	0, /*62*/
+	"genrel:  gen., rel \n", /*63*/
+	0, /*64*/
+	0, /*65*/
+	0, /*66*/
+	0, /*67*/
+	0, /*68*/
+	0, /*69*/
+	0, /*70*/
+	"spec2:  gen., gen , con , con \n", /*71*/
+	0, /*72*/
+	0, /*73*/
+	"gengen:  gen., gen \nspec3:  gen., con , gen \n", /*74*/
+	"line:  LLAB : $$3.line \n", /*75*/
+	"line:  LNAME : $$5.line \n", /*76*/
+	0, /*77*/
+	0, /*78*/
+	0, /*79*/
+	"gengen:  gen ,.gen \n", /*80*/
+	0, /*81*/
+	0, /*82*/
+	0, /*83*/
+	0, /*84*/
+	"gen:  $ -.LFCONST \ncon:  -.con \n", /*85*/
+	"gen:  LTOS +.con \n", /*86*/
+	"gen:  LTOS -.con \n", /*87*/
+	"areg:  con (.LAREG ) \nareg:  con (.) \n", /*88*/
+	"gen:  - (.LAREG ) \ncon:  (.expr ) \n", /*89*/
+	0, /*90*/
+	"gen:  ( LAREG.) + \nareg:  ( LAREG.) \n", /*91*/
+	0, /*92*/
+	"con:  ( expr.) \nexpr:  expr.+ expr \nexpr:  expr.- expr \nexpr:  expr.* expr \nexpr:  expr./ expr \nexpr:  expr.% expr \nexpr:  expr.< < expr \nexpr:  expr.> > expr \nexpr:  expr.& expr \nexpr:  expr.^ expr \nexpr:  expr.| expr \n", /*93*/
+	0, /*94*/
+	0, /*95*/
+	"name:  LNAME offset.( pointer ) \n", /*96*/
+	"name:  LNAME <.> offset ( LSB ) \n", /*97*/
+	"offset:  +.con \n", /*98*/
+	"offset:  -.con \n", /*99*/
+	0, /*100*/
+	"spec1:  gen /.con , gen \n", /*101*/
+	0, /*102*/
+	0, /*103*/
+	"rel:  con (.LPC ) \n", /*104*/
+	0, /*105*/
+	0, /*106*/
+	"genrel:  gen ,.rel \n", /*107*/
+	"spec2:  gen ,.gen , con , con \n", /*108*/
+	"gengen:  gen ,.gen \nspec3:  gen ,.con , gen \n", /*109*/
+	0, /*110*/
+	0, /*111*/
+	"expr:  expr +.expr \n", /*112*/
+	"expr:  expr -.expr \n", /*113*/
+	"expr:  expr *.expr \n", /*114*/
+	"expr:  expr /.expr \n", /*115*/
+	"expr:  expr %.expr \n", /*116*/
+	"expr:  expr <.< expr \n", /*117*/
+	"expr:  expr >.> expr \n", /*118*/
+	"expr:  expr &.expr \n", /*119*/
+	"expr:  expr ^.expr \n", /*120*/
+	"expr:  expr |.expr \n", /*121*/
+	0, /*122*/
+	0, /*123*/
+	0, /*124*/
+	0, /*125*/
+	"areg:  con ( LAREG.) \n", /*126*/
+	0, /*127*/
+	"gen:  - ( LAREG.) \n", /*128*/
+	0, /*129*/
+	0, /*130*/
+	"name:  LNAME offset (.pointer ) \n", /*131*/
+	0, /*132*/
+	0, /*133*/
+	0, /*134*/
+	"spec1:  gen / con., gen \n", /*135*/
+	"rel:  con ( LPC.) \n", /*136*/
+	0, /*137*/
+	"spec2:  gen , gen., con , con \n", /*138*/
+	0, /*139*/
+	0, /*140*/
+	0, /*141*/
+	0, /*142*/
+	0, /*143*/
+	0, /*144*/
+	"expr:  expr < <.expr \n", /*145*/
+	"expr:  expr > >.expr \n", /*146*/
+	0, /*147*/
+	0, /*148*/
+	0, /*149*/
+	0, /*150*/
+	0, /*151*/
+	0, /*152*/
+	"name:  LNAME offset ( pointer.) \n", /*153*/
+	0, /*154*/
+	0, /*155*/
+	0, /*156*/
+	"name:  LNAME < > offset.( LSB ) \n", /*157*/
+	"spec1:  gen / con ,.gen \n", /*158*/
+	0, /*159*/
+	"spec2:  gen , gen ,.con , con \n", /*160*/
+	"spec3:  gen , con ,.gen \n", /*161*/
+	0, /*162*/
+	0, /*163*/
+	0, /*164*/
+	"name:  LNAME < > offset (.LSB ) \n", /*165*/
+	0, /*166*/
+	"spec2:  gen , gen , con., con \n", /*167*/
+	0, /*168*/
+	"name:  LNAME < > offset ( LSB.) \n", /*169*/
+	"spec2:  gen , gen , con ,.con \n", /*170*/
+	0, /*171*/
+	0, /*172*/
+};

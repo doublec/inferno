@@ -1,8 +1,9 @@
 syntax: glob
 
-*.o
-*.dis
 Linux/386/bin/*
 Linux/386/lib/*
 Linux/arm/bin/*
 Linux/arm/lib/*
+
+*.dis
+*.o

@@ -42,6 +42,7 @@ menu System			'Memory monitor'	{wmrun wm/memory}
 menu System			'About'			{wmrun wm/about}
 menu Misc			'Coffee'			{wmrun wm/coffee}
 menu Misc			'Colours'			{wmrun wm/colors}
+menu Misc			'Keyboard'		{wmrun wm/keyboard}
 #menu Misc			'Winctl'			{wmrun wm/winctl}
 menu Misc			'Clock'			{wmrun wm/date}
 menu Games			'Tetris'			{wmrun wm/tetris}

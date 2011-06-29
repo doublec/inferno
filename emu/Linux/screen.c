@@ -33,11 +33,13 @@ static int b = 0;
 static int DblTime = 300000;
 static int x, y, p, dbl = 0;
 static int lastb;
+static int touch = 0;
+static int lastval = 0;
 
 static void 
 touchscreen(struct input_event* ev, int count)
 {
-	int i, touch=0;
+	int i;
 	static struct timeval lastt;
 	
 	for (i=0; i < count; i++){
@@ -53,6 +55,25 @@ touchscreen(struct input_event* ev, int count)
 					break;
 				case ABS_PRESSURE:
 					p = ev[i].value;
+					break;
+				case 0x30:		// ABS_MT_TOUCH_MAJOR
+					if (ev[i].value && lastval == 0) {
+						touch = 1;
+						b = 1;
+					} else if (ev[i].value == 0 && lastval == 0) {
+						touch = 0;
+						b = 0;
+					}
+					//lastval = ev[i].value;
+				case 0x36:		// ABS_MT_POSITION_X
+					//if (touch && lastval == 0)
+					if (lastval == 0)
+						x = ev[i].value;
+					break;
+				case 0x35:		//ABS_MT_POSITION_Y
+					//if (touch && lastval == 0)
+					if (lastval == 0)
+						y = Ysize-ev[i].value;
 					break;
 				}
 				break;
@@ -75,6 +96,13 @@ touchscreen(struct input_event* ev, int count)
 				}
 				break;
 			case EV_SYN:
+				if (ev[i].code == 0) {
+					lastval = 0;
+				} else {
+					lastval = 1;
+				}
+//				print("touch = %d, b = %d\n", touch, b);
+/*
 				if (i == 2) {
 					mousetrack(b, x, y, 0);
 				} else if (i > 2 && touch) {
@@ -82,6 +110,8 @@ touchscreen(struct input_event* ev, int count)
 				} else if (!touch && lastb) {
 					mousetrack(b, x, y, 0);
 				}
+*/
+				mousetrack(b, x, y, 0);
 //				if (i==2 && p>0)		// motion
 //					mousetrack (b, x, y, 0);
 //				else if (i>3 && p>0 && touch)	// press
@@ -90,6 +120,15 @@ touchscreen(struct input_event* ev, int count)
 //					mousetrack(b, x, y, 1);
 //				else if (i>3 && p==0 && !touch)	// release
 //					mousetrack(0, 0, 0, 1);
+/*
+				if (touch) {
+					touch = 0;
+					b = 0;
+				} else {
+					touch = 1;
+					b = 1;
+				}
+*/
 				return;
 		}
 	}
@@ -105,6 +144,9 @@ while (1){
           //perror_exit ("read()");     
 	print("gaaack\n");
 
+	for (i = 0; i < rd / size; i++) {
+		print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+	}
 	touchscreen(ev, (rd / size));
   }
 }
@@ -117,7 +159,7 @@ uchar* attachscreen ( Rectangle *aRectangle, ulong *aChannel, int *aDepth, int *
   aRectangle->max.x = Xsize;
   aRectangle->max.y = Ysize;
 
-  theDisplayDepth = 16;
+  theDisplayDepth = 32;
  
   if ( !theScreenIsInited ) {
     initScreen ( Xsize, Ysize, &theDisplayChannel, &theDisplayDepth );
@@ -135,7 +177,7 @@ uchar* attachscreen ( Rectangle *aRectangle, ulong *aChannel, int *aDepth, int *
     theScreenIsInited = 1;
   }
 
-  eventfd = open("/dev/input/event0", O_RDONLY);
+  eventfd = open("/dev/input/event2", O_RDONLY);
   kproc("readmouse", fbreadmouse, nil, 0);
 
   return theScreenData;
