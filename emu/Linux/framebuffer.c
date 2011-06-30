@@ -54,6 +54,9 @@ int framebuffer_init ( )
     return -1;
   }
 */
+
+//  ioctl(theFrameBuffer, FB_ROTATE_UR, 0);
+
   if ( ioctl ( theFrameBuffer, FBIOGET_VSCREENINFO, &theOriginVariableScreenInfo ) ) {
     close ( theFrameBuffer );
     fprint ( 2, "can't get the variable screen info: %s\n", strerror ( errno ) );
@@ -65,9 +68,9 @@ int framebuffer_init ( )
   theCurrentVariableScreenInfo.accel_flags = 0;
   if ( ioctl ( theFrameBuffer, FBIOPUT_VSCREENINFO, &theCurrentVariableScreenInfo ) ) {
     close ( theFrameBuffer );
+    printf("yuck2\n");
     return -1;
   }
-  
 
 //  if ( virtualterminal_init ( ) ){
 //    close ( theFrameBuffer );

@@ -38,8 +38,11 @@ SPECFONT: con "/fonts/lucidasans/unicode.6.font";
 
 # size in pixels
 #KEYSIZE: con 16;
-KEYSIZE: con 13;
-KEYSPACE: con 2;
+#KEYSIZE: con 13;
+#KEYSPACE: con 2;
+KEYSIZE: con 50;
+KEYHEIGHT: con 35;
+KEYSPACE: con 8;
 KEYBORDER: con 1;
 KEYGAP: con KEYSPACE - (2 * KEYBORDER);
 #ENDGAP: con 2 - KEYBORDER;
@@ -139,7 +142,7 @@ init(ctxt: ref Draw->Context, args: list of string)
 	for(i := 0; i < len keys[0]; i++)
 		if(keys[0][i] != nil)
 			cmd(t, sys->sprint("button .b%d -takefocus 0 -font %s -width %d -height %d -bd %d -activebackground %s -text {%s} -command 'send keypress %d",
-				i, FONT, KEYSIZE, KEYSIZE, KEYBORDER, background, keys[0][i], keyvals[0][i]));
+				i, FONT, KEYSIZE, KEYHEIGHT, KEYBORDER, background, keys[0][i], keyvals[0][i]));
 
 	for(i = 0; i < len specials; i++) {
 		k := specials[i];

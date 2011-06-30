@@ -57,22 +57,22 @@ touchscreen(struct input_event* ev, int count)
 					p = ev[i].value;
 					break;
 				case 0x30:		// ABS_MT_TOUCH_MAJOR
-					if (ev[i].value && lastval == 0) {
+					if (ev[i].value /* && lastval == 0*/) {
 						touch = 1;
 						b = 1;
-					} else if (ev[i].value == 0 && lastval == 0) {
+					} else if (ev[i].value == 0 /*&& lastval == 0*/) {
 						touch = 0;
 						b = 0;
 					}
 					//lastval = ev[i].value;
 				case 0x36:		// ABS_MT_POSITION_X
 					//if (touch && lastval == 0)
-					if (lastval == 0)
+					//if (lastval == 0)
 						x = ev[i].value;
 					break;
 				case 0x35:		//ABS_MT_POSITION_Y
 					//if (touch && lastval == 0)
-					if (lastval == 0)
+					//if (lastval == 0)
 						y = Ysize-ev[i].value;
 					break;
 				}
@@ -145,7 +145,7 @@ while (1){
 	print("gaaack\n");
 
 	for (i = 0; i < rd / size; i++) {
-		print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+		//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
 	}
 	touchscreen(ev, (rd / size));
   }
@@ -205,6 +205,8 @@ void flushmemscreen ( Rectangle aRectangle )
   uchar* aFrameBuffer = theFrameBuffer;
   uchar* aScreenData = theScreenData;
   int aWidth;
+  double angle = 3.14159265 / 2;
+  int x,y,u,v;
 
   if ( aRectangle.min.x < 0 )
     aRectangle.min.x = 0;
@@ -226,6 +228,25 @@ void flushmemscreen ( Rectangle aRectangle )
     aFrameBuffer += aBytesPerLine;
     aScreenData += aBytesPerLine;
   }
+//  print("%d %d\n", aScreenData[20000], aScreenData[100000]);
+//  for(y = aRectangle.min.y; y < aRectangle.max.y*aDepth-1; y++) {
+//	for(x=aRectangle.min.x; x<aRectangle.max.x*aDepth-1; x++)
+//	{
+//		u = cos(-angle) * x
+//		    + sin(-angle) * y;
+//		v = -sin(-angle) * x
+//		    + cos(-angle) * y;
+//		//print("framebuffer[%d,%d] = screenbuffer[%d,%d] = %d\n", x, y, u, v, aScreenData[u,v]);
+//		//print("u = %d, v = %d, framebuffer = screenbuffer[%d] = %d\n", u, v, v+(-u*600), aScreenData[v+(-u*600)]);
+//		//for(i = 0; i < 500; i++) {
+//		//	print(" \b");
+//		//}
+//		//aFrameBuffer = aScreenData[v+(-u*600)];
+//		//memcpy(aFrameBuffer, aScreenData+v+(-u*600), 1);
+//		//aFrameBuffer++;
+//	}
+//
+//  }
 
   if ( ( max ( aRectangle.min.x, thePointerPosition.x ) > min (aRectangle.max.x, thePointerPosition.x + thePointerWidth ) ) ||
        ( max ( aRectangle.min.y, thePointerPosition.y ) > min (aRectangle.max.y, thePointerPosition.y + thePointerHeight ) ) ) 
