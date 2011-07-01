@@ -12,6 +12,7 @@ static	char	*imod = "/dis/emuinit.dis";
 extern	char*	hosttype;
 char*	tkfont;	/* for libtk/utils.c */
 int	tkstylus;	/* libinterp/tk.c */
+char*	mousefile = "/dev/input/event0";
 extern	int	mflag;
 	int	dflag;
 	int vflag;
@@ -32,6 +33,7 @@ static void
 usage(void)
 {
 	fprint(2, "Usage: emu [options...] [file.dis [args...]]\n"
+		"\t-M<devpath>\t#mouse input device path\n"
 		"\t-D[8,16,32]\t#framebuffer depth\n"
 		"\t-gXxY\n"
 		"\t-c[0-9]\n"
@@ -123,6 +125,10 @@ option(int argc, char *argv[], void (*badusage)(void))
 	ARGBEGIN {
 	default:
 		badusage();
+	case 'M':
+		cp = EARGF(badusage());
+		mousefile = strdup(cp);
+		break;
 	case 'D':	/* framebuffer depth */
 		cp = EARGF(badusage());
 		if (!isnum(cp))

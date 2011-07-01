@@ -462,6 +462,7 @@ extern	int	globfs;
 extern	int	greyscale;
 extern	uint	qiomaxatomic;
 extern	int	displaydepth;
+extern	char*	mousefile;
 
 /*
  * floating point control and status register masks

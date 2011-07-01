@@ -151,7 +151,7 @@ uchar* attachscreen ( Rectangle *rect, ulong *chan, int *depth, int *width, int 
 		screeninited = 1;
 	}
 
-	eventfd = open("/dev/input/event0", O_RDONLY);
+	eventfd = open(mousefile, O_RDONLY);
 	kproc("readmouse", fbreadmouse, nil, 0);
 
 	return screendata;
