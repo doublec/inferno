@@ -28,6 +28,7 @@ executeonnewstack:
         /* if we return here, tramp didn't do it's job */
 	mov	r0, #0
 //	mov	r7, #SYS_exit
+	mov r7, #__NR_exit
 	swi	0x0
         ldmea   fp, {fp, sp, pc}
         .size   executeonnewstack, .-executeonnewstack
@@ -50,6 +51,7 @@ unlockandexit:
         str     r1, [r0]
 	mov	r0, #0
 //	mov	r7, #SYS_exit
+	mov r7, #__NR_exit
 	swi	0x0
         ldmea   fp, {fp, sp, pc}
         .size   unlockandexit, .-unlockandexit

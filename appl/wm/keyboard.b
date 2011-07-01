@@ -70,7 +70,7 @@ Shift =>			Key("Shift", Keyboard->LShift, 45, nil, 0),
 Esc =>			Key("Esc", 8r33, 21, nil, 0),
 Ctrl =>			Key("Ctrl", Keyboard->LCtrl, 36, nil, 0),
 Alt =>			Key("Alt", Keyboard->LAlt, 22, nil, 0),
-Space =>			Key(" ", ' ', 140, nil, 0),
+Space =>			Key(" ", ' ', 300, nil, 0),
 Space+1 =>		Key("Return", '\n', 36, nil, 0),
 };
 

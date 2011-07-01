@@ -25,12 +25,14 @@ extern	int	mflag;
 	int	qflag;
 	int	xtblbit;
 	ulong	displaychan;
+	int	displaydepth;
 char *cputype;
 
 static void
 usage(void)
 {
 	fprint(2, "Usage: emu [options...] [file.dis [args...]]\n"
+		"\t-D[8,16,32]\t#framebuffer depth\n"
 		"\t-gXxY\n"
 		"\t-c[0-9]\n"
 		"\t-d file.dis\n"
@@ -121,6 +123,14 @@ option(int argc, char *argv[], void (*badusage)(void))
 	ARGBEGIN {
 	default:
 		badusage();
+	case 'D':	/* framebuffer depth */
+		cp = EARGF(badusage());
+		if (!isnum(cp))
+			badusage();
+		displaydepth = atoi(cp);
+		if (!(displaydepth == 8 || displaydepth == 16 || displaydepth == 32))
+			usage();
+		break;
 	case 'g':		/* Window geometry */
 		if (geom(EARGF(badusage())) == 0)
 			badusage();

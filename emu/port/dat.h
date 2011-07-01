@@ -461,6 +461,7 @@ extern	int	xtblbit;
 extern	int	globfs;
 extern	int	greyscale;
 extern	uint	qiomaxatomic;
+extern	int	displaydepth;
 
 /*
  * floating point control and status register masks

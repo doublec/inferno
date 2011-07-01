@@ -84,5 +84,6 @@ void modinit(void){
 	freetypemodinit();
 }
 
+	int dontcompile = 1;
 char* conffile = "emu-g";
 ulong kerndate = KERNDATE;

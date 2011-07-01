@@ -140,9 +140,11 @@ static void fbreadmouse(void* v)
   struct input_event ev[64];
   int i;
 while (1){
-      if ((rd = read (eventfd, ev, sizeof(ev))) < size)
+      if ((rd = read (eventfd, ev, sizeof(ev))) < size) {
           //perror_exit ("read()");     
-	print("gaaack\n");
+		print("read %d instead of %d\n", rd, size);
+		sleep(1);
+	}
 
 	for (i = 0; i < rd / size; i++) {
 		//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
@@ -159,7 +161,7 @@ uchar* attachscreen ( Rectangle *aRectangle, ulong *aChannel, int *aDepth, int *
   aRectangle->max.x = Xsize;
   aRectangle->max.y = Ysize;
 
-  theDisplayDepth = 32;
+  theDisplayDepth = displaydepth;
  
   if ( !theScreenIsInited ) {
     initScreen ( Xsize, Ysize, &theDisplayChannel, &theDisplayDepth );
@@ -177,7 +179,7 @@ uchar* attachscreen ( Rectangle *aRectangle, ulong *aChannel, int *aDepth, int *
     theScreenIsInited = 1;
   }
 
-  eventfd = open("/dev/input/event2", O_RDONLY);
+  eventfd = open("/dev/input/event0", O_RDONLY);
   kproc("readmouse", fbreadmouse, nil, 0);
 
   return theScreenData;
@@ -228,25 +230,6 @@ void flushmemscreen ( Rectangle aRectangle )
     aFrameBuffer += aBytesPerLine;
     aScreenData += aBytesPerLine;
   }
-//  print("%d %d\n", aScreenData[20000], aScreenData[100000]);
-//  for(y = aRectangle.min.y; y < aRectangle.max.y*aDepth-1; y++) {
-//	for(x=aRectangle.min.x; x<aRectangle.max.x*aDepth-1; x++)
-//	{
-//		u = cos(-angle) * x
-//		    + sin(-angle) * y;
-//		v = -sin(-angle) * x
-//		    + cos(-angle) * y;
-//		//print("framebuffer[%d,%d] = screenbuffer[%d,%d] = %d\n", x, y, u, v, aScreenData[u,v]);
-//		//print("u = %d, v = %d, framebuffer = screenbuffer[%d] = %d\n", u, v, v+(-u*600), aScreenData[v+(-u*600)]);
-//		//for(i = 0; i < 500; i++) {
-//		//	print(" \b");
-//		//}
-//		//aFrameBuffer = aScreenData[v+(-u*600)];
-//		//memcpy(aFrameBuffer, aScreenData+v+(-u*600), 1);
-//		//aFrameBuffer++;
-//	}
-//
-//  }
 
   if ( ( max ( aRectangle.min.x, thePointerPosition.x ) > min (aRectangle.max.x, thePointerPosition.x + thePointerWidth ) ) ||
        ( max ( aRectangle.min.y, thePointerPosition.y ) > min (aRectangle.max.y, thePointerPosition.y + thePointerHeight ) ) ) 
@@ -278,13 +261,14 @@ static void initScreen ( int aXSize, int aYSize, ulong *aChannel, int *aDepth )
 {
   if ( framebuffer_init () )
     return;
-/* 
+/*
   if ( framebuffer_enum_modes ( (modeCallback)choiseModeCallback, aDepth ) )
     return;
 
   if ( framebuffer_enum_modes ( (modeCallback)selectModeCallback, aDepth ) )
     return;
 */
+
   theFrameBuffer = framebuffer_get_buffer ();
   switch ( *aDepth ) {
   case 16: //16bit RGB (2 bytes, red 5@11, green 6@5, blue 5@0) 
