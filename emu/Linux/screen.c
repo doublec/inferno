@@ -1,3 +1,7 @@
+/*
+ * This file is based on a port to the OLPC by Andrey Mirtchovski et. al.
+ */
+
 #include "dat.h"
 #include "fns.h"
 #include "../port/error.h"
@@ -11,20 +15,18 @@
 
 Point mousexy(void);
 
-static ulong theDisplayChannel = 0;
-static int theDisplayDepth = 0;
-static int theScreenIsInited = 0;
-static unsigned char* theScreenData = 0;
-static unsigned char* theFrameBuffer = 0;
-static Point thePointerPosition = { 0, 0 };
-static Lock thePointerLock;
-static uchar* thePointer = 0;
-static int thePointerHeight = 0;
-static int thePointerWidth = 0;
+static ulong displaychannel = 0;
+static int screeninited = 0;
+static unsigned char* screendata = 0;
+static unsigned char* framebuffer = 0;
+static Point pointerposition = { 0, 0 };
+static Lock pointerlock;
+static uchar* pointer = 0;
+static int pointerheight = 0;
+static int pointerwidth = 0;
 
-static void screenProc ( void* );
-static void initScreen ( int, int, ulong*, int* );
-void drawPointer ( int, int );
+static void initscreen ( int, int, ulong*, int* );
+void drawpointer ( int, int );
 
 static int eventfd;
 static int mousepid;
@@ -125,175 +127,152 @@ static void fbreadmouse(void* v)
 	}
 }
 
-uchar* attachscreen ( Rectangle *aRectangle, ulong *aChannel, int *aDepth, int *aWidth, int *aSoftScreen )
+uchar* attachscreen ( Rectangle *rect, ulong *chan, int *depth, int *width, int *softscreen )
 {
 	Xsize &= ~0x3;	/* ensure multiple of 4 */
-	aRectangle->min.x = 0;
-	aRectangle->min.y = 0;
-	aRectangle->max.x = Xsize;
-	aRectangle->max.y = Ysize;
+	rect->min.x = 0;
+	rect->min.y = 0;
+	rect->max.x = Xsize;
+	rect->max.y = Ysize;
 
-	theDisplayDepth = displaydepth;
-
-	if ( !theScreenIsInited ) {
-		initScreen ( Xsize, Ysize, &theDisplayChannel, &theDisplayDepth );
-		theScreenData = malloc ( Xsize * Ysize * ( theDisplayDepth / 8  ) );
-		if ( !theScreenData )
+	if ( !screeninited ) {
+		initscreen ( Xsize, Ysize, &displaychannel, &displaydepth );
+		screendata = malloc ( Xsize * Ysize * ( displaydepth / 8  ) );
+		if ( !screendata )
 			fprint ( 2, "cannot allocate screen buffer" );
 	}
 
-	*aChannel = theDisplayChannel;
-	*aDepth = theDisplayDepth;
+	*chan = displaychannel;
+	*depth = displaydepth;
 
-	*aWidth = ( Xsize / 4 ) * ( *aDepth / 8 );
-	*aSoftScreen = 1;
-	if ( !theScreenIsInited ){
-		theScreenIsInited = 1;
+	*width = ( Xsize / 4 ) * ( *depth / 8 );
+	*softscreen = 1;
+	if ( !screeninited ){
+		screeninited = 1;
 	}
 
 	eventfd = open("/dev/input/event0", O_RDONLY);
 	kproc("readmouse", fbreadmouse, nil, 0);
 
-	return theScreenData;
+	return screendata;
 }
 
 void detachscreen ()
 {
-	free ( theScreenData );
-	theScreenData = 0;
-	framebuffer_release_buffer ( theFrameBuffer );
-	theFrameBuffer = 0;
+	free ( screendata );
+	screendata = 0;
+	framebuffer_release_buffer ( framebuffer );
+	framebuffer = 0;
 	framebuffer_deinit ();
 }
 
 #define max(a,b) (((a)>(b))?(a):(b))
 #define min(a,b) (((a)<(b))?(a):(b))
 
-void flushmemscreen ( Rectangle aRectangle )
+void flushmemscreen ( Rectangle rect )
 {
-	if ( !theFrameBuffer || !theScreenData )
+	if ( !framebuffer || !screendata )
 		return;
-	int aDepth = theDisplayDepth / 8;
-	int aBytesPerLine = Xsize * aDepth;
+	int depth = displaydepth / 8;
+	int bpl = Xsize * depth;
 	int i;
-	uchar* aFrameBuffer = theFrameBuffer;
-	uchar* aScreenData = theScreenData;
-	int aWidth;
+	uchar* fb = framebuffer;
+	uchar* screen = screendata;
+	int width;
 	double angle = 3.14159265 / 2;
 	int x,y,u,v;
 
-	if ( aRectangle.min.x < 0 )
-		aRectangle.min.x = 0;
-	if ( aRectangle.min.y < 0 )
-		aRectangle.min.y = 0;
-	if ( aRectangle.max.x > Xsize )
-		aRectangle.max.x = Xsize;
-	if ( aRectangle.max.y > Ysize )
-		aRectangle.max.y = Ysize;
+	if ( rect.min.x < 0 )
+		rect.min.x = 0;
+	if ( rect.min.y < 0 )
+		rect.min.y = 0;
+	if ( rect.max.x > Xsize )
+		rect.max.x = Xsize;
+	if ( rect.max.y > Ysize )
+		rect.max.y = Ysize;
 
-	if ( ( aRectangle.max.x < aRectangle.min.x ) || ( aRectangle.max.y < aRectangle.min.y ) )
+	if ( ( rect.max.x < rect.min.x ) || ( rect.max.y < rect.min.y ) )
 		return;
 
-	aFrameBuffer += aRectangle.min.y * aBytesPerLine + aRectangle.min.x * aDepth;
-	aScreenData += aRectangle.min.y * aBytesPerLine + aRectangle.min.x * aDepth;
-	aWidth = ( aRectangle.max.x - aRectangle.min.x ) * aDepth;
-	for ( i = aRectangle.min.y; i < aRectangle.max.y; i++ ) {
-		memcpy ( aFrameBuffer, aScreenData, aWidth );
-		aFrameBuffer += aBytesPerLine;
-		aScreenData += aBytesPerLine;
+	fb += rect.min.y * bpl + rect.min.x * depth;
+	screen += rect.min.y * bpl + rect.min.x * depth;
+	width = ( rect.max.x - rect.min.x ) * depth;
+	for ( i = rect.min.y; i < rect.max.y; i++ ) {
+		memcpy ( fb, screen, width );
+		fb += bpl;
+		screen += bpl;
 	}
 
-	if ( ( max ( aRectangle.min.x, thePointerPosition.x ) > min (aRectangle.max.x, thePointerPosition.x + thePointerWidth ) ) ||
-	    ( max ( aRectangle.min.y, thePointerPosition.y ) > min (aRectangle.max.y, thePointerPosition.y + thePointerHeight ) ) )
+	if ( ( max ( rect.min.x, pointerposition.x ) > min (rect.max.x, pointerposition.x + pointerwidth ) ) ||
+	    ( max ( rect.min.y, pointerposition.y ) > min (rect.max.y, pointerposition.y + pointerheight ) ) )
 		return;
 
-	if ( canlock ( &thePointerLock ) ) {
-		drawPointer ( thePointerPosition.x , thePointerPosition.y );
-		unlock ( &thePointerLock );
+	if ( canlock ( &pointerlock ) ) {
+		drawpointer ( pointerposition.x , pointerposition.y );
+		unlock ( &pointerlock );
 	}
-}
-
-int choiseModeCallback ( int x, int y, int bpp, int* callbackInfo )
-{
-	if ( ( x == Xsize ) && ( y == Ysize ) && ( *callbackInfo < ( bpp ) ) )
-		*callbackInfo = bpp;
-	return 0;
-}
-
-int selectModeCallback ( int x, int y, int bpp, int* callbackInfo )
-{
-	if ( ( x == Xsize ) && ( y == Ysize ) && ( *callbackInfo == ( bpp ) ) )
-		return 1;
-	return 0;
 }
 
 #include "arrows.h"
 
-static void initScreen ( int aXSize, int aYSize, ulong *aChannel, int *aDepth )
+static void initscreen ( int aXSize, int aYSize, ulong *chan, int *depth )
 {
 	if ( framebuffer_init () )
 		return;
-	/*
-  if ( framebuffer_enum_modes ( (modeCallback)choiseModeCallback, aDepth ) )
-    return;
 
-  if ( framebuffer_enum_modes ( (modeCallback)selectModeCallback, aDepth ) )
-    return;
-*/
-
-	theFrameBuffer = framebuffer_get_buffer ();
-	switch ( *aDepth ) {
+	framebuffer = framebuffer_get_buffer ();
+	switch ( *depth ) {
 	case 16: //16bit RGB (2 bytes, red 5@11, green 6@5, blue 5@0) 
-		*aChannel = RGB16;
-		thePointer = PointerRGB16;
-		thePointerWidth = PointerRGB16Width;
-		thePointerHeight = PointerRGB16Height;
+		*chan = RGB16;
+		pointer = PointerRGB16;
+		pointerwidth = PointerRGB16Width;
+		pointerheight = PointerRGB16Height;
 		break;
 	case 24: //24bit RGB (3 bytes, red 8@16, green 8@8, blue 8@0) 
-		*aChannel = RGB24;
-		thePointer = PointerRGB24;
-		thePointerWidth = PointerRGB24Width;
-		thePointerHeight = PointerRGB24Height;
+		*chan = RGB24;
+		pointer = PointerRGB24;
+		pointerwidth = PointerRGB24Width;
+		pointerheight = PointerRGB24Height;
 		break;
 	case 32: //24bit RGB (4 bytes, nothing@24, red 8@16, green 8@8, blue 8@0)
-		*aChannel = XRGB32;
-		thePointer = PointerRGB32;
-		thePointerWidth = PointerRGB32Width;
-		thePointerHeight = PointerRGB32Height;
+		*chan = XRGB32;
+		pointer = PointerRGB32;
+		pointerwidth = PointerRGB32Width;
+		pointerheight = PointerRGB32Height;
 		break;
 	}
 }
 
 void setpointer ( int x, int y )
 {
-	if ( !theFrameBuffer || !theScreenData )
+	if ( !framebuffer || !screendata )
 		return;
-	int aDepth = theDisplayDepth / 8;
-	int aBytesPerLine = Xsize * aDepth;
+	int depth = displaydepth / 8;
+	int bpl = Xsize * depth;
 	int i;
-	uchar* aFrameBuffer = theFrameBuffer + thePointerPosition.y * aBytesPerLine + thePointerPosition.x * aDepth;
-	uchar* aScreenData = theScreenData + thePointerPosition.y * aBytesPerLine + thePointerPosition.x * aDepth;
-	int aWidth = thePointerWidth * aDepth;
-	lock ( &thePointerLock );
-	thePointerPosition.x = x;
-	thePointerPosition.y = y;
-	unlock ( &thePointerLock );
-	for ( i = 0; i < thePointerHeight; i++ ) {
-		memcpy ( aFrameBuffer, aScreenData, aWidth );
-		aFrameBuffer += aBytesPerLine;
-		aScreenData += aBytesPerLine;
+	uchar* fb = framebuffer + pointerposition.y * bpl + pointerposition.x * depth;
+	uchar* screen = screendata + pointerposition.y * bpl + pointerposition.x * depth;
+	int width = pointerwidth * depth;
+	lock ( &pointerlock );
+	pointerposition.x = x;
+	pointerposition.y = y;
+	unlock ( &pointerlock );
+	for ( i = 0; i < pointerheight; i++ ) {
+		memcpy ( fb, screen, width );
+		fb += bpl;
+		screen += bpl;
 	}
-	drawPointer ( thePointerPosition.x , thePointerPosition.y );
+	drawpointer ( pointerposition.x , pointerposition.y );
 }
 
-void drawPointer ( int x, int y )
+void drawpointer ( int x, int y )
 {
 	uchar i,j;
-	uchar aDepth = theDisplayDepth / 8;
-	uchar* aStart = theFrameBuffer + y * Xsize * aDepth + x * aDepth;
-	int aWidth = ( ( x + thePointerWidth ) < Xsize ) ? thePointerWidth : Xsize - x;
-	int aHeight = ( ( y + thePointerHeight ) < Ysize ) ? thePointerHeight : Ysize - y;
-	for ( i = 0; i < aHeight; i++, aStart += Xsize * aDepth )
-		for ( j = 0; j < aWidth * aDepth; j++ )
-			aStart [ j ] &= thePointer [ i * aDepth * thePointerWidth + j ];
+	uchar depth = displaydepth / 8;
+	uchar* aStart = framebuffer + y * Xsize * depth + x * depth;
+	int width = ( ( x + pointerwidth ) < Xsize ) ? pointerwidth : Xsize - x;
+	int aHeight = ( ( y + pointerheight ) < Ysize ) ? pointerheight : Ysize - y;
+	for ( i = 0; i < aHeight; i++, aStart += Xsize * depth )
+		for ( j = 0; j < width * depth; j++ )
+			aStart [ j ] &= pointer [ i * depth * pointerwidth + j ];
 }

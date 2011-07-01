@@ -235,7 +235,7 @@ pointerread(Chan* c, void* a, long n, vlong off)
 	return n;
 }
 
-extern void drawPointer(int, int);
+extern void drawpointer(int, int);
 
 static long
 pointerwrite(Chan* c, void* va, long n, vlong off)
@@ -275,7 +275,7 @@ pointerwrite(Chan* c, void* va, long n, vlong off)
 		if(n == 0){
 			cur.data = nil;
 			//drawcursor(&cur);
-			//drawPointer(cur.hotx, cur.hoty);
+			//drawpointer(cur.hotx, cur.hoty);
 			break;
 		}
 		if(n < 8)
@@ -290,7 +290,7 @@ pointerwrite(Chan* c, void* va, long n, vlong off)
 			error(Ebadarg);
 		cur.data = (uchar*)va + 4*4;
 		//drawcursor(&cur);
-		drawPointer(cur.hotx, cur.hoty);
+		drawpointer(cur.hotx, cur.hoty);
 		break;
 	default:
 		error(Ebadusefd);
