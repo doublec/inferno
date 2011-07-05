@@ -24,6 +24,7 @@ OBJ=\
 	kproc-pthreads.$O\
 	segflush-$OBJTYPE.$O\
 	framebuffer.$O\
+	devevents.$O\
 	$CONF.root.$O\
 	lock.$O\
 	$DEVS\

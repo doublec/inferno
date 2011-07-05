@@ -454,6 +454,9 @@ extern	Queue*	gkscanq;
 extern	int	Xsize;
 extern	int	Ysize;
 extern  int     rotation_opt;
+extern  char    **eventfiles;
+extern  int     eventfds[5];
+extern  Queue   *eventq;
 extern	Pool*	mainmem;
 extern	char	rootdir[MAXROOT];		/* inferno root */
 extern	Procs	procs;

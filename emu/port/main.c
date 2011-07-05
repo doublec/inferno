@@ -13,6 +13,7 @@ extern	char*	hosttype;
 char*	tkfont;	/* for libtk/utils.c */
 int	tkstylus;	/* libinterp/tk.c */
 char*	mousefile = "/dev/input/event0";
+char    **eventfiles = NULL;
 extern	int	mflag;
 	int	dflag;
 	int vflag;
@@ -39,7 +40,8 @@ usage(void)
 		"\t-gXxY\n"
 		"\t-c[0-9]\n"
 		"\t-d file.dis\n"
-	        "\t-o (orientation flip)"
+	        "\t-o (orientation flip)\n"
+	        "\t-E<devpath>\t#add a device to the 'events' device\n"
 		"\t-s\n"
 		"\t-v\n"
 		"\t-p<poolname>=maxsize\n"
@@ -130,6 +132,35 @@ option(int argc, char *argv[], void (*badusage)(void))
 	case 'M':
 		cp = EARGF(badusage());
 		mousefile = strdup(cp);
+		break;
+	case 'E': /* event file */
+		cp = EARGF(badusage());
+		char **neweventfiles;
+		int i;
+		int numevents = 0;
+		if(eventfiles == NULL) {
+			neweventfiles = malloc(2*sizeof(char *));
+			neweventfiles[0] = strdup(cp);
+			neweventfiles[1] = NULL;
+		} else {
+			for(i = 0; eventfiles[i] != NULL; i++) {
+				numevents++;
+			}
+			neweventfiles = malloc((numevents + 2) 
+					       * sizeof(char *));
+			for(i = 0; eventfiles[i] != NULL; i++) {
+				neweventfiles[i] = eventfiles[i];
+			}
+			neweventfiles[i] = strdup(cp);
+			neweventfiles[i + 1] = NULL;
+		}
+		if(eventfiles != NULL) {
+			free(eventfiles);
+		}
+		eventfiles = neweventfiles;
+		for(i = 0; i < numevents; i++) {
+			printf("numevents = %d %d %s\n", numevents, i, eventfiles[i]);
+		}
 		break;
 	case 'D':	/* framebuffer depth */
 		cp = EARGF(badusage());
