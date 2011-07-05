@@ -7,3 +7,4 @@ Linux/arm/lib/*
 
 *.dis
 *.o
+o.*

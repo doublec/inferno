@@ -21,6 +21,7 @@ extern	int	mflag;
 	char	*eve;
 	int	Xsize	= 640;
 	int	Ysize	= 480;
+        int     rotation_opt = 0;
 	int	bflag = 1;
 	int	sflag;
 	int	qflag;
@@ -38,6 +39,7 @@ usage(void)
 		"\t-gXxY\n"
 		"\t-c[0-9]\n"
 		"\t-d file.dis\n"
+	        "\t-o (orientation flip)"
 		"\t-s\n"
 		"\t-v\n"
 		"\t-p<poolname>=maxsize\n"
@@ -174,6 +176,9 @@ option(int argc, char *argv[], void (*badusage)(void))
 		break;
 	case 'p':		/* pool option */
 		poolopt(EARGF(badusage()));
+		break;
+	case 'o':
+	        rotation_opt = 1;
 		break;
 	case 'f':		/* Set font path */
 		tkfont = EARGF(badusage());
