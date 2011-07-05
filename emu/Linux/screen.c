@@ -59,30 +59,32 @@ touchscreen(struct input_event* ev, int count)
 		p = ev[i].value;
 		break;
 	    case 0x30:		// ABS_MT_TOUCH_MAJOR
-		if (ev[i].value /* && lastval == 0*/) {
+		if (ev[i].value  && lastval == 0) {
 		    touch = 1;
 		    b = 1;
-		} else if (ev[i].value == 0 /*&& lastval == 0*/) {
+		} else if (ev[i].value == 0 && lastval == 0) {
 		    touch = 0;
 		    b = 0;
 		}
 		//lastval = ev[i].value;
 	    case 0x36:		// ABS_MT_POSITION_X
 				//if (touch && lastval == 0)
-				//if (lastval == 0)
-		if(!rotation_opt) {
-		    x = ev[i].value;
-		} else {
-		    y = ev[i].value;
+		if (lastval == 0) {
+		    if(!rotation_opt) {
+			x = ev[i].value;
+		    } else {
+			y = ev[i].value;
+		    }
 		}
 		break;
 	    case 0x35:		//ABS_MT_POSITION_Y
 				//if (touch && lastval == 0)
-				//if (lastval == 0)
-		if(!rotation_opt) {
-		    y = Ysize-ev[i].value;
-		} else {
-		    x = ev[i].value;
+		if (lastval == 0) {
+		    if(!rotation_opt) {
+			y = Ysize-ev[i].value;
+		    } else {
+			x = ev[i].value;
+		    }
 		}
 		break;
 	    }
@@ -282,8 +284,8 @@ void setpointer ( int x, int y )
 	int fb_bpl = Ysize * depth;
 	int i, j;
 	uchar *cur_col;
-	uchar *fb = framebuffer + (Xsize - pointerposition.x + pointerwidth - 1) * fb_bpl + pointerposition.y * depth;
-	uchar *screen = screendata + pointerposition.y * bpl + (pointerposition.x - pointerwidth + 1) * depth;
+	uchar *fb = framebuffer + (Xsize - pointerposition.x) * fb_bpl + pointerposition.y * depth;
+	uchar *screen = screendata + pointerposition.y * bpl + (pointerposition.x) * depth;
 	int height = (pointerposition.y + pointerheight > Ysize) ? Ysize - pointerposition.y : pointerheight;
 	lock(&pointerlock);
 	pointerposition.x = x;
@@ -333,23 +335,23 @@ void drawpointer ( int x, int y )
 	uchar *fb = framebuffer;
 	int fb_bpl = Ysize * depth;
 	int fb_startx, fb_starty;
-	uchar *screen = pointer;
 	char empty[depth];
+	char *pointerptr = pointer;
 	for(i = 0; i < depth; i++) {
 	    empty[i] = 0xFF; // initialize white space comparison
 	}
-	fb_starty = Xsize - x + width;
+	fb_starty = Xsize - x;
 	fb_startx = y;
 	fb += fb_starty * fb_bpl + fb_startx * depth;
 	cur_col = fb;
 	for(i = 0; i < aHeight; i++) {
 	    fb = cur_col;
 	    for(j = 0; j < width; j++) {
-		if(memcmp(empty, screen, depth)) {
-		    memcpy(fb, screen, depth);
+		if(memcmp(empty, pointerptr, depth)) {
+		    memcpy(fb, pointerptr, depth);
 		}
 		fb -= fb_bpl;
-		screen += depth;
+		pointerptr += depth;
 	    }
 	    cur_col += depth;
 	}
