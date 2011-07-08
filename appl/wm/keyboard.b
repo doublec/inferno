@@ -40,9 +40,9 @@ SPECFONT: con "/fonts/lucidasans/unicode.6.font";
 #KEYSIZE: con 16;
 #KEYSIZE: con 13;
 #KEYSPACE: con 2;
-KEYSIZE: con 50;
+KEYSIZE: con 40;
 KEYHEIGHT: con 35;
-KEYSPACE: con 8;
+KEYSPACE: con 2;
 KEYBORDER: con 1;
 KEYGAP: con KEYSPACE - (2 * KEYBORDER);
 #ENDGAP: con 2 - KEYBORDER;
@@ -77,8 +77,8 @@ Space+1 =>		Key("Return", '\n', 36, nil, 0),
 keys:= array[] of {
 	# unshifted
 	array[] of {
-		"Esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "\\\\", "`", nil,
-		"Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "<-", nil,
+		"Esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "\\\\", "<-", nil,
+		"Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "`", nil,
 		"Ctrl", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "Enter", nil,
 		"Shift", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "Shift", nil,
 		"Caps", "Alt", " ", "Alt", nil,

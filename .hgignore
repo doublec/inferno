@@ -8,3 +8,10 @@ Linux/arm/lib/*
 *.dis
 *.o
 o.*
+a.out
+appl/Close.b
+Linux/386/bin/mk
+utils/mk/mk
+Linux/386/bin/mkext
+*.sbl
+parallel-push
