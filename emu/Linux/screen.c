@@ -155,11 +155,6 @@ touchscreen(struct input_event* ev, int count)
 	    }
 	    break;
 	case EV_SYN:
-	    if (ev[i].code == 0) {
-		lastval = 0;
-	    } else {
-		lastval = 1;
-	    }
 	    mousetrack(b, x, y, 0);
 	    return;
 	}
