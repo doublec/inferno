@@ -13,6 +13,8 @@ extern	char*	hosttype;
 char*	tkfont;	/* for libtk/utils.c */
 int	tkstylus;	/* libinterp/tk.c */
 char*	mousefile = "/dev/input/event0";
+char	type = 's';
+char    **eventfiles = NULL;
 extern	int	mflag;
 	int	dflag;
 	int vflag;
@@ -34,12 +36,11 @@ static void
 usage(void)
 {
 	fprint(2, "Usage: emu [options...] [file.dis [args...]]\n"
-		"\t-M<devpath>\t#mouse input device path\n"
-		"\t-D[8,16,32]\t#framebuffer depth\n"
-		"\t-gXxY\n"
+		"\t-T<device type>\t #use 'n' = nook color, 's' = nexus s, 'e' = emulator\n"
 		"\t-c[0-9]\n"
 		"\t-d file.dis\n"
-	        "\t-o (orientation flip)"
+	        "\t-o (orientation flip)\n"
+	        "\t-E<devpath>\t#add a device to the 'events' device\n"
 		"\t-s\n"
 		"\t-v\n"
 		"\t-p<poolname>=maxsize\n"
@@ -127,21 +128,61 @@ option(int argc, char *argv[], void (*badusage)(void))
 	ARGBEGIN {
 	default:
 		badusage();
-	case 'M':
+	case 'T':
 		cp = EARGF(badusage());
-		mousefile = strdup(cp);
-		break;
-	case 'D':	/* framebuffer depth */
-		cp = EARGF(badusage());
-		if (!isnum(cp))
-			badusage();
-		displaydepth = atoi(cp);
-		if (!(displaydepth == 8 || displaydepth == 16 || displaydepth == 32))
-			usage();
-		break;
-	case 'g':		/* Window geometry */
-		if (geom(EARGF(badusage())) == 0)
-			badusage();
+		type = cp[0];
+		if (type == 's') {
+			displaydepth = 32;
+			geom("480x800");
+			mousefile = "/dev/input/event0";
+			cp = "/dev/input/event5";
+		}
+		else if (type == 'c') {
+			displaydepth = 32;
+			geom("600x1024");
+			rotation_opt = 1;
+			mousefile = "/dev/input/event2";
+			cp = "/dev/input/event0";
+		}
+		else if (type == 'e') {
+			displaydepth = 16;
+			geom("320x480");
+			mousefile = "/dev/input/event0";
+			cp = "/dev/input/event0";
+		}
+		else {
+			displaydepth = 32;
+			geom("480x800");
+			mousefile = "/dev/input/event0";
+			cp = "/dev/input/event5";
+		}
+
+		char **neweventfiles;
+		int i;
+		int numevents = 0;
+		if(eventfiles == NULL) {
+			neweventfiles = malloc(2*sizeof(char *));
+			neweventfiles[0] = strdup(cp);
+			neweventfiles[1] = NULL;
+		} else {
+			for(i = 0; eventfiles[i] != NULL; i++) {
+				numevents++;
+			}
+			neweventfiles = malloc((numevents + 2) 
+					       * sizeof(char *));
+			for(i = 0; eventfiles[i] != NULL; i++) {
+				neweventfiles[i] = eventfiles[i];
+			}
+			neweventfiles[i] = strdup(cp);
+			neweventfiles[i + 1] = NULL;
+		}
+		if(eventfiles != NULL) {
+			free(eventfiles);
+		}
+		eventfiles = neweventfiles;
+		for(i = 0; i < numevents; i++) {
+			printf("numevents = %d %d %s\n", numevents, i, eventfiles[i]);
+		}
 		break;
 	case 'b':		/* jit array bounds checking (obsolete, now on by default) */
 		break;
@@ -176,9 +217,6 @@ option(int argc, char *argv[], void (*badusage)(void))
 		break;
 	case 'p':		/* pool option */
 		poolopt(EARGF(badusage()));
-		break;
-	case 'o':
-	        rotation_opt = 1;
 		break;
 	case 'f':		/* Set font path */
 		tkfont = EARGF(badusage());

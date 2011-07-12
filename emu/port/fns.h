@@ -69,6 +69,7 @@ int		eqqid(Qid, Qid);
 void		error(char*);
 void		errorf(char*, ...);
 #pragma varargck argpos errorf 1
+void            eventslave(void *);
 void		excinit(void);
 void		exhausted(char*);
 int		export(int, char*, int);

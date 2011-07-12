@@ -103,7 +103,32 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		fatal("cannot run command: " + e);
 
 	fakekbd = chan of string;
+
+	minimize_win := chan of string;
+	
+	spawn monitor_button(minimize_win);
+
 	for(;;) alt {
+	s := <- minimize_win =>
+		if(kbdfocus != nil) {
+			kbdfocus.ctl <-= "task";
+			old := kbdfocus;
+			kbdfocus = nil;
+			for(z := wmsrv->top(); z != nil; z = z.znext) {
+				sys->print("iter\n");
+				if(z != old && z.id != 0) {
+					sys->print("found client %d\n", z.id);
+					kbdfocus = z;
+					break;
+				}
+			}
+			old.ctl <-= "haskbdfocus 0";
+			if(kbdfocus != nil) {
+				sys->print("giving kbdfocus\n");
+				kbdfocus.ctl <-= "haskbdfocus 1";
+				kbdfocus.ctl <-= "raise";
+			}
+		}
 	c := <-win.ctl or
 	c = <-wmctxt.ctl =>
 		# XXX could implement "pleaseexit" in order that
@@ -688,4 +713,33 @@ command(ctxt: ref Draw->Context, args: list of string, sync: chan of string)
 	}
 	sync <-= nil;
 	c->init(ctxt, args);
+}
+
+monitor_button(ch : chan of string)
+{
+	fd := sys->open("/dev/events", sys->OREAD);
+	while(1) {
+		newstr : string;
+		buf := array[64] of byte;
+		n := sys->read(fd, buf, len buf);
+		buf = buf[:n];
+		str := string buf;
+		if(strstr(str, "0 1 102 1") != -1) {
+			ch <-= "minimize";
+		}
+	}
+}
+
+strstr(s, t : string) : int
+{
+	if (t == nil)
+		return 0;
+	n := len t;
+	if (n > len s)
+		return -1;
+	e := len s - n;
+	for (p := 0; p <= e; p++)
+		if (s[p:p+n] == t)
+			return p;
+	return -1;
 }

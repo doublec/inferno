@@ -5,6 +5,7 @@
 #include	"mp.h"
 #include	"libsec.h"
 #include	"keyboard.h"
+#include        <stdio.h>
 
 extern int cflag;
 int	exdebug;
@@ -13,6 +14,7 @@ extern int keepbroken;
 enum
 {
 	Qdir,
+	Qevents,
 	Qcons,
 	Qconsctl,
 	Qdrivers,
@@ -38,6 +40,7 @@ enum
 Dirtab contab[] =
 {
 	".",	{Qdir, 0, QTDIR},	0,		DMDIR|0555,
+	"events",       {Qevents},      0,      0666,
 	"cons",		{Qcons},	0,	0666,
 	"consctl",	{Qconsctl},	0,	0222,
 	"drivers",	{Qdrivers},	0,	0444,
@@ -65,6 +68,9 @@ char*	gkscanid;		/* name of raw scan format (if defined) */
 Queue*	gkbdq;			/* Graphics keyboard unprocessed input */
 Queue*	kbdq;			/* Console window unprocessed keyboard input */
 Queue*	lineq;			/* processed console input */
+Queue*  eventq;                 /* Events imported from Linux host devices */
+
+int     eventfds[5];
 
 char	*ossysname;
 
@@ -96,6 +102,12 @@ static struct
 	Rune	c;
 	int	count;
 } kbd;
+
+#ifndef __linux__
+void eventslave(void *a) {
+	fprintf(stderr, "Events device currently only supported under Linux hosts\n");
+}
+#endif
 
 void
 kbdslave(void *a)
@@ -167,6 +179,9 @@ consinit(void)
 	gkbdq = qopen(512, 0, nil, nil);
 	if(gkbdq == 0)
 		panic("no memory");
+	eventq = qopen(512, 0, nil, nil);
+	if(eventq == 0)
+		panic("no memory");
 	randominit();
 }
 
@@ -185,7 +200,26 @@ consattach(char *spec)
 	static int kp;
 
 	if(kp == 0 && !dflag) {
+		int i;
 		kp = 1;
+		if(eventfiles != NULL) {
+			for(i = 0; eventfiles[i] != NULL; i++) {
+				int *event_num = malloc(sizeof(int));
+				char buf[40];
+				snprintf(buf, 40, "events%d", i);
+				if(i >= 5) {
+					// temporary
+					fprintf(stderr, "more than 5 event devices not supported\n");
+					break;
+				}
+				eventfds[i] = open(eventfiles[i], O_RDONLY);
+				if(eventfds[i] == -1) {
+					perror("could not open event device");
+				}
+				*event_num = i;
+				kproc(buf, eventslave, event_num, 0);
+			}
+		}
 		kproc("kbd", kbdslave, 0, 0);
 	}
 	return devattach('c', spec);
@@ -242,6 +276,11 @@ consopen(Chan *c, int omode)
 		poperror();
 		wunlock(&kprintq.l);
 		c->iounit = qiomaxatomic;
+		break;
+	case Qevents:
+		qflush(eventq); /* prevent reader from seeing old
+				    button presses -- there's 
+				    probably a better way*/
 		break;
 	}
 	return c;
@@ -392,6 +431,9 @@ consread(Chan *c, void *va, long n, vlong offset)
 
 	case Qkeyboard:
 		return qread(gkbdq, va, n);
+
+	case Qevents:
+		return qread(eventq, va, n);
 
 	case Qkprint:
 		rlock(&kprintq.l);
@@ -611,14 +653,14 @@ nrand(int n)
 	return (randn>>16) % n;
 }
 
-/*
+#ifndef ANDROID
 int
 rand(void)
 {
 	nrand(1);
 	return randn;
 }
-*/
+#endif
 
 ulong
 truerand(void)

@@ -454,6 +454,9 @@ extern	Queue*	gkscanq;
 extern	int	Xsize;
 extern	int	Ysize;
 extern  int     rotation_opt;
+extern  char    **eventfiles;
+extern  int     eventfds[5];
+extern  Queue   *eventq;
 extern	Pool*	mainmem;
 extern	char	rootdir[MAXROOT];		/* inferno root */
 extern	Procs	procs;
@@ -464,6 +467,7 @@ extern	int	greyscale;
 extern	uint	qiomaxatomic;
 extern	int	displaydepth;
 extern	char*	mousefile;
+extern	char	type;
 
 /*
  * floating point control and status register masks
