@@ -131,7 +131,7 @@ static void fbreadmouse(void* v)
 	}
 
 	for (i = 0; i < rd / size; i++) {
-	    //print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+	    print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
 	}
 	touchscreen(ev, (rd / size));
     }
@@ -189,8 +189,6 @@ void flushmemscreen ( Rectangle rect )
     uchar* fb = framebuffer;
     uchar* screen = screendata;
     int width;
-    double angle = 3.14159265 / 2;
-    int x,y,u,v;
 
     if ( rect.min.x < 0 )
 	rect.min.x = 0;
