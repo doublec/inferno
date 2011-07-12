@@ -40,9 +40,8 @@ SPECFONT: con "/fonts/lucidasans/unicode.6.font";
 #KEYSIZE: con 16;
 #KEYSIZE: con 13;
 #KEYSPACE: con 2;
-KEYSIZE: con 46;
-SPECIALKEYSIZE: con KEYSIZE * 3 / 2;
-KEYHEIGHT: con 40;
+KEYSIZE: con 40;
+KEYHEIGHT: con 35;
 KEYSPACE: con 2;
 KEYBORDER: con 1;
 KEYGAP: con KEYSPACE - (2 * KEYBORDER);
@@ -59,41 +58,39 @@ Key: adt {
 
 background: con "#dddddd";
 
-Backspace, Tab, Backslash, CapsLock, Return, Shift, Esc, Ctrl, Alt, Space: con iota;
+Backspace, Tab, Backslash, CapsLock, Return, Shift, Ctrl, Esc, Alt, Space: con iota;
 
 specials := array[] of {
-Backspace =>		Key("<-", '\b', SPECIALKEYSIZE, nil, 0),
-Tab =>			Key("Tab", '\t', SPECIALKEYSIZE, nil, 0),
+Backspace =>		Key("<-", '\b', 28, nil, 0),
+Tab =>			Key("Tab", '\t', 26, nil, 0),
 Backslash =>		Key("\\\\", '\\', KEYSIZE, nil, 0),
-CapsLock =>		Key("Caps", Keyboard->Caps, KEYSIZE, nil, 0),
-Return =>			Key("Enter", '\n', SPECIALKEYSIZE, nil, 0),
-Shift =>			Key("Shift", Keyboard->LShift, SPECIALKEYSIZE, nil, 0),
-Esc =>			Key("Esc", 8r33, KEYSIZE, nil, 0),
-Ctrl =>			Key("Ctrl", Keyboard->LCtrl, KEYSIZE, nil, 0),
-Alt =>			Key("Alt", Keyboard->LAlt, SPECIALKEYSIZE, nil, 0),
-Space =>			Key(" ", ' ', KEYSIZE * 4, nil, 0),
-Space+1 =>		Key("Return", '\n', SPECIALKEYSIZE, nil, 0),
+CapsLock =>		Key("Caps", Keyboard->Caps, 40, nil, 0),
+Return =>			Key("Enter", '\n', 36, nil, 0),
+Shift =>			Key("Shift", Keyboard->LShift, 45, nil, 0),
+Esc =>			Key("Esc", 8r33, 21, nil, 0),
+Ctrl =>			Key("Ctrl", Keyboard->LCtrl, 36, nil, 0),
+Alt =>			Key("Alt", Keyboard->LAlt, 22, nil, 0),
+Space =>			Key(" ", ' ', 300, nil, 0),
+Space+1 =>		Key("Return", '\n', 36, nil, 0),
 };
 
 keys:= array[] of {
 	# unshifted
 	array[] of {
-		"Esc", "Tab", "'", "\\\\", "[", "]", "-", "=", "<-", nil,
-		"1", "2", "3", "4", "5", "6", "7", "8", "9", "0", nil,
-		"q", "w", "e", "r", "t", "y", "u", "i", "o", "p", nil,
-		"a", "s", "d", "f", "g", "h", "j", "k", "l", ";", nil,
-		"z", "x", "c", "v", "b", "n", "m", ",", ".", "/", nil,
-		"Caps", "Shift", " ", "Ctrl", "~", "Enter", nil,
+		"Esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "\\\\", "<-", nil,
+		"Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "`", nil,
+		"Ctrl", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "Enter", nil,
+		"Shift", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "Shift", nil,
+		"Caps", "Alt", " ", "Alt", nil,
 	},
 
 	# shifted
 	array[] of {
-		"Esc", "Tab", "\"",  "`", "\\{", "\\}", "_", "+", "<-", nil,
-		"@", "#", "$", "%", "^", "&", "*", "(", ")", "|", nil,
-		"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P",nil,
-		"A", "S", "D", "F", "G", "H", "J", "K", "L", ":", nil,
-		"Z", "X", "C", "V", "B", "N", "M", "<", ">", "?", nil,
-		"Caps", "Shift", " ", "Ctrl", "!", nil,
+		"Esc", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "_", "+", "|", "~", nil,
+		"Tab", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\\{", "\\}", "<-", nil,
+		"Ctrl", "A", "S", "D", "F", "G", "H", "J", "K", "L", ":", "\"", "Return", nil,
+		"Shift", "Z", "X", "C", "V", "B", "N", "M", "<", ">", "?", "Shift", nil,
+		"Caps", "Alt", " ", "Alt", nil,
 	},
 };
 
