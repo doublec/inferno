@@ -468,6 +468,8 @@ extern	uint	qiomaxatomic;
 extern	int	displaydepth;
 extern	char*	mousefile;
 extern	char	type;
+extern	int	maineventnum;
+extern	char*	homedevice;
 
 /*
  * floating point control and status register masks

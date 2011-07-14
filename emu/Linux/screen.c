@@ -12,6 +12,8 @@
 #include <draw.h>
 #include <memdraw.h>
 #include <cursor.h>
+#include <stdio.h>
+#include <unistd.h>
 
 Point mousexy(void);
 
@@ -28,7 +30,7 @@ static int pointerwidth = 0;
 static void initscreen ( int, int, ulong*, int* );
 void drawpointer ( int, int );
 
-static int eventfd, /*mainbuttonfd, */volbuttonfd;
+static int eventfd, mainbuttonfd, homebuttonfd;
 static int mousepid;
 
 static int b = 0;
@@ -43,6 +45,11 @@ static int lowx = 5; //should be xmin + xadjust
 static int ymin = 2;
 static int yadjust = 11; //shifts mouse up
 static int lowy = 13; //should be ymin + yadjust
+
+static char mainbuttoninput[19];
+static int on = 1;
+static int powerbuttonpress = 0;
+static char emulator[67];
 
 static void 
 touchscreen(struct input_event* ev, int count)
@@ -184,6 +191,102 @@ static void fbreadmouse(void* v)
     }
 }
 
+static void readbutton(void* v)
+{
+	int rd, value, size = sizeof(struct input_event);
+	struct input_event ev[64];
+	int i;
+	while (1){
+		if ((rd = read (mainbuttonfd, ev, sizeof(ev))) < size) {
+			print("read %d instead of %d\n", rd, size);
+			sleep(1);
+		}
+
+		for (i = 0; i < rd / size; i++) {
+			print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+			if (ev[i].code == 0x74) {
+				if (ev[i].value == 1) {
+					powerbuttonpress = 1;
+				}
+				else if (ev[i].value == 0) {
+					if (powerbuttonpress == 1) {
+						if (type == 's') {
+							FILE * power;
+							power = fopen("/sys/power/state", "w");
+							if (on == 1) {
+								fwrite("mem\n", 1, 4, power);
+								on = 0;
+							} else {
+								fwrite("on\n", 1, 3, power);
+								on = 1;
+							}
+							fclose(power);
+						} else if (type == 'c') {
+							FILE * brightness;
+							brightness = fopen("/sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness", "w");
+							if (on == 1) {
+								fwrite("0\n", 1, 2, brightness);
+								printf("Warning: avoided changing power state; instead brightness changed\n");
+								on = 0;
+							} else {
+								fwrite("255\n", 1, 4, brightness);
+								on = 1;
+							}
+							fclose(brightness);
+						} else if (type == 'e') {
+							FILE * power;
+							power = fopen("/sys/power/state", "w");
+							if (on == 1) {
+								fwrite("mem\n", 1, 4, power);
+								on = 0;
+							} else {
+								fwrite("on\n", 1, 3, power);
+								on = 1;
+							}
+							fclose(power);
+						} else {
+							FILE * power;
+							power = fopen("/sys/power/state", "w");
+							if (on == 1) {
+								fwrite("mem\n", 1, 4, power);
+								on = 0;
+							} else {
+								fwrite("on\n", 1, 3, power);
+								on = 1;
+							}
+							fclose(power);
+						}
+					}
+					powerbuttonpress = 0;
+				}
+			}
+		}
+	}
+}
+
+static void readhomebutton(void* v)
+{
+	int rd, value, size = sizeof(struct input_event);
+	struct input_event ev[64];
+	int i;
+	while (1){
+		if ((rd = read (homebuttonfd, ev, sizeof(ev))) < size) {
+			print("read %d instead of %d\n", rd, size);
+			sleep(1);
+		}
+		for (i = 0; i < rd / size; i++) {
+			print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+			if (ev[i].code == 0x66) {
+				if (ev[i].value == 1) {
+					if (powerbuttonpress == 1) {
+						exit (1);
+					}
+				}
+			}
+		}
+    }
+}
+
 uchar* attachscreen ( Rectangle *rect, ulong *chan, int *depth, int *width, int *softscreen )
 {
     Xsize &= ~0x3;	/* ensure multiple of 4 */
@@ -210,6 +313,13 @@ uchar* attachscreen ( Rectangle *rect, ulong *chan, int *depth, int *width, int 
 
 	eventfd = open(mousefile, O_RDONLY);
 	kproc("readmouse", fbreadmouse, nil, 0);
+
+	sprintf(mainbuttoninput, "/dev/input/event%d", maineventnum);
+	mainbuttonfd = open(mainbuttoninput, O_RDONLY);
+	kproc("readbutton", readbutton, nil, 0);
+
+	homebuttonfd = open(homedevice, O_RDONLY);
+	kproc("readhomebutton", readhomebutton, nil, 0);
 
 	if (type == 's') {
 		xadjust = 3; //shifts mouse left
