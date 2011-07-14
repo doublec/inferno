@@ -16,6 +16,7 @@ char*	mousefile = "/dev/input/event0";
 char	type = 's';
 int	maineventnum = 5;
 char*	homedevice = "/dev/input/event5";
+char*	voldevice = "/dev/input/event2";
 char    **eventfiles = NULL;
 extern	int	mflag;
 	int	dflag;
@@ -38,11 +39,9 @@ static void
 usage(void)
 {
 	fprint(2, "Usage: emu [options...] [file.dis [args...]]\n"
-		"\t-T<device type>\t #'n' = nook color, 's' = nexus s, 'e' = emulator\n"
+		"\t-t<device type>\t #'n' = nook color, 's' = nexus s, 'e' = emulator\n"
 		"\t-c[0-9]\n"
 		"\t-d file.dis\n"
-	        "\t-o (orientation flip)\n"
-	        "\t-E<devpath>\t#add a device to the 'events' device\n"
 		"\t-s\n"
 		"\t-v\n"
 		"\t-p<poolname>=maxsize\n"
@@ -138,6 +137,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 			geom("480x800");
 			mousefile = "/dev/input/event0";
 			homedevice = "/dev/input/event5";
+			voldevice = "/dev/input/event2";
 			maineventnum = 2;
 			system("echo \"on\" > /sys/power/state");
 			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
@@ -148,6 +148,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 			rotation_opt = 1;
 			mousefile = "/dev/input/event2";
 			homedevice = "/dev/input/event0";
+			voldevice = "/dev/input/event1";
 			maineventnum = 0;
 			system("echo \"on\" > /sys/power/state");
 			system("echo 255 > /sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness");
@@ -157,6 +158,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 			geom("320x480");
 			mousefile = "/dev/input/event0";
 			homedevice = "/dev/input/event0";
+			voldevice = "/dev/input/event0";
 			maineventnum = 0;
 		}
 		else {
@@ -164,6 +166,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 			geom("480x800");
 			mousefile = "/dev/input/event0";
 			homedevice = "/dev/input/event5";
+			voldevice = "/dev/input/event2";
 			maineventnum = 0;
 			system("echo \"on\" > /sys/power/state");
 			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");

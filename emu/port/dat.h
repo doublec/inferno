@@ -470,6 +470,7 @@ extern	char*	mousefile;
 extern	char	type;
 extern	int	maineventnum;
 extern	char*	homedevice;
+extern	char*	voldevice;
 
 /*
  * floating point control and status register masks
