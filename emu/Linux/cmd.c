@@ -75,7 +75,7 @@ childproc(Targ *t)
 
 	signal(SIGPIPE, SIG_DFL);
 
-	execvp(t->args[0], t->args);
+	execve(t->args[0], t->args, NULL);
 	if(Debug)
 		print("execvp: %s\n",strerror(errno));
 	fprint(t->wfd, "exec failed: %s", strerror(errno));
