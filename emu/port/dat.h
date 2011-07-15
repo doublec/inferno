@@ -57,7 +57,7 @@ enum
 	PRINTSIZE	= 256,
 	READSTR		= 1000		/* temporary buffer size for device reads */
 };
-
+#define MAX_EVENTFDS 10
 struct Ref
 {
 	Lock	lk;
@@ -455,7 +455,7 @@ extern	int	Xsize;
 extern	int	Ysize;
 extern  int     rotation_opt;
 extern  char    **eventfiles;
-extern  int     eventfds[5];
+extern  int     eventfds[MAX_EVENTFDS];
 extern  Queue   *eventq;
 extern	Pool*	mainmem;
 extern	char	rootdir[MAXROOT];		/* inferno root */

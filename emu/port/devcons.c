@@ -70,7 +70,7 @@ Queue*	kbdq;			/* Console window unprocessed keyboard input */
 Queue*	lineq;			/* processed console input */
 Queue*  eventq;                 /* Events imported from Linux host devices */
 
-int     eventfds[5];
+int     eventfds[MAX_EVENTFDS];
 
 char	*ossysname;
 
@@ -207,9 +207,9 @@ consattach(char *spec)
 				int *event_num = malloc(sizeof(int));
 				char buf[40];
 				snprintf(buf, 40, "events%d", i);
-				if(i >= 5) {
+				if(i >= MAX_EVENTFDS) {
 					// temporary
-					fprintf(stderr, "more than 5 event devices not supported\n");
+					fprintf(stderr, "too many event devices\n");
 					break;
 				}
 				eventfds[i] = open(eventfiles[i], O_RDONLY);
