@@ -40,7 +40,8 @@ SPECFONT: con "/fonts/lucidasans/unicode.6.font";
 #KEYSIZE: con 16;
 #KEYSIZE: con 13;
 #KEYSPACE: con 2;
-KEYSIZE: con 47;
+KEYSIZE: con 46;
+SPECIALKEYSIZE: con KEYSIZE * 3 / 2;
 KEYHEIGHT: con 40;
 KEYSPACE: con 2;
 KEYBORDER: con 1;
@@ -61,17 +62,15 @@ background: con "#dddddd";
 Backspace, Tab, Backslash, CapsLock, Return, Shift, Esc, Ctrl, Alt, Space: con iota;
 
 specials := array[] of {
-Backspace =>		Key("<-", '\b', 70, nil, 0),
-Tab =>			Key("Tab", '\t', 70, nil, 0),
+Backspace =>		Key("<-", '\b', SPECIALKEYSIZE, nil, 0),
+Tab =>			Key("Tab", '\t', SPECIALKEYSIZE, nil, 0),
 Backslash =>		Key("\\\\", '\\', KEYSIZE, nil, 0),
-CapsLock =>		Key("Caps", Keyboard->Caps, 70, nil, 0),
-Return =>			Key("Enter", '\n', 70, nil, 0),
-Shift =>			Key("Shift", Keyboard->LShift, 70, nil, 0),
-Esc =>			Key("Esc", 8r33, 30, nil, 0),
-Ctrl =>			Key("Ctrl", Keyboard->LCtrl, 70, nil, 0),
-Alt =>			Key("Alt", Keyboard->LAlt, 70, nil, 0),
-Space =>			Key(" ", ' ', 200, nil, 0),
-Space+1 =>		Key("Return", '\n', 70, nil, 0),
+CapsLock =>		Key("Caps", Keyboard->Caps, KEYSIZE, nil, 0),
+Return =>			Key("Enter", '\n', SPECIALKEYSIZE, nil, 0),
+Shift =>			Key("Shift", Keyboard->LShift, SPECIALKEYSIZE, nil, 0),
+Esc =>			Key("Esc", 8r33, KEYSIZE, nil, 0),
+Ctrl =>			Key("Ctrl", Keyboard->LCtrl, KEYSIZE, nil, 0),
+Space =>			Key(" ", ' ', KEYSIZE * 4, nil, 0),
 };
 
 keys:= array[] of {
@@ -82,17 +81,17 @@ keys:= array[] of {
 		"q", "w", "e", "r", "t", "y", "u", "i", "o", "p", nil,
 		"a", "s", "d", "f", "g", "h", "j", "k", "l", ";", nil,
 		"z", "x", "c", "v", "b", "n", "m", ",", ".", "/", nil,
-		"Caps", "Shift", " ", "Ctrl", "Enter", nil,
+		"Caps", "Shift", " ", "Ctrl", "~", "Enter", nil,
 	},
 
 	# shifted
 	array[] of {
 		"Esc", "Tab", "\"",  "`", "\\{", "\\}", "_", "+", "<-", nil,
 		"@", "#", "$", "%", "^", "&", "*", "(", ")", "|", nil,
-		"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "~",nil,
+		"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P",nil,
 		"A", "S", "D", "F", "G", "H", "J", "K", "L", ":", nil,
-		"Z", "X", "C", "V", "B", "N", "M", "<", ">", "?", "!", nil,
-		"Caps", "Shift", " ", "Ctrl", "Return", nil,
+		"Z", "X", "C", "V", "B", "N", "M", "<", ">", "?", nil,
+		"Caps", "Shift", " ", "Ctrl", "!", nil,
 	},
 };
 

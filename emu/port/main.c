@@ -136,6 +136,8 @@ option(int argc, char *argv[], void (*badusage)(void))
 			geom("480x800");
 			mousefile = "/dev/input/event0";
 			cp = "/dev/input/event5";
+			system("echo \"on\" > /sys/power/state");
+			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
 		}
 		else if (type == 'c') {
 			displaydepth = 32;
@@ -155,6 +157,8 @@ option(int argc, char *argv[], void (*badusage)(void))
 			geom("480x800");
 			mousefile = "/dev/input/event0";
 			cp = "/dev/input/event5";
+			system("echo \"on\" > /sys/power/state");
+			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
 		}
 
 		char **neweventfiles;
