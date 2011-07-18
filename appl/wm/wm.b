@@ -99,6 +99,8 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	if(argv == nil)
 		argv = "wm/toolbar" :: nil;
 	spawn command(clientctxt, argv, sync);
+	argv = "wm/windowbar" :: nil;
+	spawn command(clientctxt, argv, sync);
 	if((e := <-sync) != nil)
 		fatal("cannot run command: " + e);
 
@@ -115,16 +117,13 @@ init(ctxt: ref Draw->Context, argv: list of string)
 			old := kbdfocus;
 			kbdfocus = nil;
 			for(z := wmsrv->top(); z != nil; z = z.znext) {
-				sys->print("iter\n");
 				if(z != old && z.id != 0) {
-					sys->print("found client %d\n", z.id);
 					kbdfocus = z;
 					break;
 				}
 			}
 			old.ctl <-= "haskbdfocus 0";
 			if(kbdfocus != nil) {
-				sys->print("giving kbdfocus\n");
 				kbdfocus.ctl <-= "haskbdfocus 1";
 				kbdfocus.ctl <-= "raise";
 			}

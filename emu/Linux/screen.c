@@ -59,95 +59,94 @@ touchscreen(struct input_event* ev, int count)
 
     for (i=0; i < count; i++){
 	//printf("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x, touch = %d\n", i, ev[i].type, ev[i].code, ev[i].value, touch);
-	if(0) {
+	/*if(0) {
 		fprint(2, "%d/%d [%d] ", i, count, ev[i].code);
-	}
+	}*/
 	switch(ev[i].type){
 	case EV_ABS:
-	    switch(ev[i].code){
-	    case ABS_X:
-		x = ev[i].value;
-		break;
-	    case ABS_Y:
-		y = ev[i].value;
-		break;
-	    case ABS_PRESSURE:
-		p = ev[i].value;
-		break;
-	    case 0x30:		// ABS_MT_TOUCH_MAJOR
-		if (ev[i].value) {
-		    touch = 1;
-		    b = 1;
-		} else if (ev[i].value == 0) {
-		    touch = 0;
-		    b = 0;
-		}
-		break;
-	    case 0x36:		// ABS_MT_POSITION_X
-		if (type == 's') {
-			if(!rotation_opt) {
-				if ((ev[i].value * 800 / 1024) > lowy)
-					y = (ev[i].value * 800 /1024) - yadjust;
-				else
-					y = ymin;
-				break;
-
-			} else {
-				if ((ev[i].value * 800 / 1024) > lowx)
-					x = (ev[i].value * 800 / 1024) - xadjust;
-				else
-					x = xmin;
-				break;
+		switch(ev[i].code){
+		case ABS_X:
+			x = ev[i].value;
+			break;
+		case ABS_Y:
+			y = ev[i].value;
+			break;
+		case ABS_PRESSURE:
+			p = ev[i].value;
+			break;
+		case 0x30:		// ABS_MT_TOUCH_MAJOR
+			if (ev[i].value) {
+				touch = 1;
+				b = 1;
+			} else if (ev[i].value == 0) {
+				touch = 0;
+				b = 0;
 			}
-		} else {
-			if(!rotation_opt) {
-				if (ev[i].value > lowx)
-					x = ev[i].value - xadjust;
-				else
-					x = xmin;
-				break;
+			break;
+		case 0x36:		// ABS_MT_POSITION_X
+			if (type == 's') {
+				if(!rotation_opt) {
+					if ((ev[i].value * 800 / 1024) > lowy)
+						y = (ev[i].value * 800 /1024) - yadjust;
+					else
+						y = ymin;
+					break;
+				} else {
+					if ((ev[i].value * 800 / 1024) > lowx)
+						x = (ev[i].value * 800 / 1024) - xadjust;
+					else
+						x = xmin;
+					break;
+				}
 			} else {
-				if (ev[i].value > lowy)
-					y = ev[i].value - yadjust;
-				else
-					y = ymin;
-				break;
+				if(!rotation_opt) {
+					if (ev[i].value > lowx)
+						x = ev[i].value - xadjust;
+					else
+						x = xmin;
+					break;
+				} else {
+					if (ev[i].value > lowy)
+						y = ev[i].value - yadjust;
+					else
+						y = ymin;
+					break;
+				}
 			}
-		}
-		break;
-	    case 0x35:		//ABS_MT_POSITION_Y
-		if (type == 's') {
-			if(!rotation_opt) {
-				if ((ev[i].value * 480 /1024) > lowx)
-					x = (ev[i].value * 480 /1024) - xadjust;
-				else
-					x = xmin;
-				break;
+			break;
+		case 0x35:		//ABS_MT_POSITION_Y
+			if (type == 's') {
+				if(!rotation_opt) {
+					if ((ev[i].value * 480 /1024) > lowx)
+						x = (ev[i].value * 480 /1024) - xadjust;
+					else
+						x = xmin;
+					break;
+				} else {
+					if ((Ysize-ev[i].value * 480 /1024) > lowy)
+						y = (Ysize-ev[i].value * 480 / 1024) - yadjust;
+					else
+						y = ymin;
+					break;
+				}
 			} else {
-				if ((Ysize-ev[i].value * 480 /1024) > lowy)
-					y = (Ysize-ev[i].value * 480 / 1024) - yadjust;
-				else
-					y = ymin;
-				break;
+				if(!rotation_opt) {
+					if (Ysize-ev[i].value > lowy)
+						y = Ysize-ev[i].value - yadjust;
+					else
+						y = ymin;
+					break;
+				} else {
+					if (ev[i].value > lowx)
+						x = ev[i].value - xadjust;
+					else
+						x = xmin;
+					break;
+				}
 			}
-		} else {
-			if(!rotation_opt) {
-				if (Ysize-ev[i].value > lowy)
-					y = Ysize-ev[i].value - yadjust;
-				else
-					y = ymin;
-				break;
-			} else {
-				if (ev[i].value > lowx)
-					x = ev[i].value - xadjust;
-				else
-					x = xmin;
-				break;
+			break;
 			}
-		}
-		break;
-	    }
-	    break;
+			break;
 	case EV_KEY:
 	    if (ev[i].value){
 		touch=1;
@@ -186,10 +185,8 @@ static void fbreadmouse(void* v)
 
 		for (i = 0; i < rd / size; i++) {
 			//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
-			if (ev[i].code == 30) {
-				if (ev[i].value == 0) {
-					return;
-				}
+			if (ev[i].value == 0 && ev[i].code == 30) {
+				return;
 			}
 		}
 		touchscreen(ev, (rd / size));
@@ -280,13 +277,9 @@ static void readhomebutton(void* v)
 			sleep(1);
 		}
 		for (i = 0; i < rd / size; i++) {
-			print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
-			if (ev[i].code == 0x66) {
-				if (ev[i].value == 1) {
-					if (powerbuttonpress == 1) {
-						exit (1);
-					}
-				}
+			//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+			if (powerbuttonpress == 1 && ev[i].code == 0x66 /* && ev[i].value == 1 */) {
+				exit (1);
 			}
 		}
     }
@@ -303,14 +296,10 @@ static void readvolbutton(void* v)
 			sleep(1);
 		}
 		for (i = 0; i < rd / size; i++) {
-			print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
-			if (ev[i].code == 0x72) {
-				if (ev[i].value == 1) {
-					if (powerbuttonpress == 1) {
-						char* args[3] = {"/system/bin/reboot", "-p", NULL};
-						execve(args[0], args, NULL);
-					}
-				}
+			//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+			if (powerbuttonpress == 1 && ev[i].code == 0x72 /* && ev[i].value == 1 */) {
+				char* args[3] = {"/system/bin/reboot", "-p", NULL};
+				execve(args[0], args, NULL);
 			}
 		}
     }

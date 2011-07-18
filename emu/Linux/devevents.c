@@ -7,7 +7,7 @@ void event_process(struct input_event *ev, int count, int event_num) {
 	for(i = 0; i < count; i++) {
 		char buf[40];
 		snprintf(buf, 40, "%d %d %hu %d\n", event_num,  
-			 ev->type, ev->code, ev->value);
+			 ev[i].type, ev[i].code, ev[i].value);
 		qproduce(eventq, buf, strlen(buf));
 	}
 }
