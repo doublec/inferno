@@ -12,6 +12,8 @@
 #include <draw.h>
 #include <memdraw.h>
 #include <cursor.h>
+#include <stdio.h>
+#include <unistd.h>
 
 Point mousexy(void);
 
@@ -28,7 +30,7 @@ static int pointerwidth = 0;
 static void initscreen ( int, int, ulong*, int* );
 void drawpointer ( int, int );
 
-static int eventfd, /*mainbuttonfd, */volbuttonfd;
+static int eventfd, mainbuttonfd, homebuttonfd, volbuttonfd;
 static int mousepid;
 
 static int b = 0;
@@ -44,6 +46,11 @@ static int ymin = 2;
 static int yadjust = 11; //shifts mouse up
 static int lowy = 13; //should be ymin + yadjust
 
+static char mainbuttoninput[19];
+static int on = 1;
+static int powerbuttonpress = 0;
+static char emulator[67];
+
 static void 
 touchscreen(struct input_event* ev, int count)
 {
@@ -52,90 +59,94 @@ touchscreen(struct input_event* ev, int count)
 
     for (i=0; i < count; i++){
 	//printf("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x, touch = %d\n", i, ev[i].type, ev[i].code, ev[i].value, touch);
-	if(0) {
+	/*if(0) {
 		fprint(2, "%d/%d [%d] ", i, count, ev[i].code);
-	}
+	}*/
 	switch(ev[i].type){
 	case EV_ABS:
-	    switch(ev[i].code){
-	    case ABS_X:
-		x = ev[i].value;
-		break;
-	    case ABS_Y:
-		y = ev[i].value;
-		break;
-	    case ABS_PRESSURE:
-		p = ev[i].value;
-		break;
-	    case 0x30:		// ABS_MT_TOUCH_MAJOR
-		if (ev[i].value) {
-		    touch = 1;
-		    b = 1;
-		} else if (ev[i].value == 0) {
-		    touch = 0;
-		    b = 0;
-		}
-		break;
-	    case 0x36:		// ABS_MT_POSITION_X
-		if (type == 'c' | type != 's') {
-			if(!rotation_opt) {
-				if (ev[i].value > lowx)
-					x = ev[i].value - xadjust;
-				else
-					x = xmin;
-			} else {
-				if (ev[i].value > lowy)
-					y = ev[i].value - yadjust;
-				else
-					y = ymin;
+		switch(ev[i].code){
+		case ABS_X:
+			x = ev[i].value;
+			break;
+		case ABS_Y:
+			y = ev[i].value;
+			break;
+		case ABS_PRESSURE:
+			p = ev[i].value;
+			break;
+		case 0x30:		// ABS_MT_TOUCH_MAJOR
+			if (ev[i].value) {
+				touch = 1;
+				b = 1;
+			} else if (ev[i].value == 0) {
+				touch = 0;
+				b = 0;
 			}
-		}
-		if (type == 's') {
-			if(!rotation_opt) {
-				if ((ev[i].value * 800 / 1024) > lowy)
-					y = (ev[i].value * 800 /1024) - yadjust;
-				else
-					y = ymin;
-
+			break;
+		case 0x36:		// ABS_MT_POSITION_X
+			if (type == 's') {
+				if(!rotation_opt) {
+					if ((ev[i].value * 800 / 1024) > lowy)
+						y = (ev[i].value * 800 /1024) - yadjust;
+					else
+						y = ymin;
+					break;
+				} else {
+					if ((ev[i].value * 800 / 1024) > lowx)
+						x = (ev[i].value * 800 / 1024) - xadjust;
+					else
+						x = xmin;
+					break;
+				}
 			} else {
-				if ((ev[i].value * 800 / 1024) > lowx)
-					x = (ev[i].value * 800 / 1024) - xadjust;
-				else
-					x = xmin;
+				if(!rotation_opt) {
+					if (ev[i].value > lowx)
+						x = ev[i].value - xadjust;
+					else
+						x = xmin;
+					break;
+				} else {
+					if (ev[i].value > lowy)
+						y = ev[i].value - yadjust;
+					else
+						y = ymin;
+					break;
+				}
 			}
-		}
-		break;
-	    case 0x35:		//ABS_MT_POSITION_Y
-		if (type == 'n' | type != 's') {
-			if(!rotation_opt) {
-				if (Ysize-ev[i].value > lowy)
-					y = Ysize-ev[i].value - yadjust;
-				else
-					y = ymin;
-				break;
+			break;
+		case 0x35:		//ABS_MT_POSITION_Y
+			if (type == 's') {
+				if(!rotation_opt) {
+					if ((ev[i].value * 480 /1024) > lowx)
+						x = (ev[i].value * 480 /1024) - xadjust;
+					else
+						x = xmin;
+					break;
+				} else {
+					if ((Ysize-ev[i].value * 480 /1024) > lowy)
+						y = (Ysize-ev[i].value * 480 / 1024) - yadjust;
+					else
+						y = ymin;
+					break;
+				}
 			} else {
-				if (ev[i].value > lowx)
-					x = ev[i].value - xadjust;
-				else
-					x = xmin;
+				if(!rotation_opt) {
+					if (Ysize-ev[i].value > lowy)
+						y = Ysize-ev[i].value - yadjust;
+					else
+						y = ymin;
+					break;
+				} else {
+					if (ev[i].value > lowx)
+						x = ev[i].value - xadjust;
+					else
+						x = xmin;
+					break;
+				}
 			}
-		}
-		if (type == 's') {
-			if(!rotation_opt) {
-				if ((ev[i].value * 480 /1024) > lowx)
-					x = (ev[i].value * 480 /1024) - xadjust;
-				else
-					x = xmin;
-			} else {
-				if ((Ysize-ev[i].value * 480 /1024) > lowy)
-					y = (Ysize-ev[i].value * 480 / 1024) - yadjust;
-				else
-					y = ymin;
+			break;
 			}
-		}
-		break;
-	    }
-	    break;
+			break;
 	case EV_KEY:
 	    if (ev[i].value){
 		touch=1;
@@ -163,24 +174,134 @@ touchscreen(struct input_event* ev, int count)
 
 static void fbreadmouse(void* v)
 {
-    int rd, value, size = sizeof(struct input_event);
-    struct input_event ev[64];
-    int i;
-    while (1){
-	if ((rd = read (eventfd, ev, sizeof(ev))) < size) {
-	    print("read %d instead of %d\n", rd, size);
-	    sleep(1);
-	}
-
-	for (i = 0; i < rd / size; i++) {
-	    //print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
-	    if (ev[i].code == 30) {
-		if (ev[i].value == 0) {
-			return;
+	int rd, value, size = sizeof(struct input_event);
+	struct input_event ev[64];
+	int i;
+	while (1){
+		if ((rd = read (eventfd, ev, sizeof(ev))) < size) {
+			print("read %d instead of %d\n", rd, size);
+			sleep(1);
 		}
-	    }
+
+		for (i = 0; i < rd / size; i++) {
+			//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+			if (ev[i].value == 0 && ev[i].code == 30) {
+				return;
+			}
+		}
+		touchscreen(ev, (rd / size));
 	}
-	touchscreen(ev, (rd / size));
+}
+
+static void readbutton(void* v)
+{
+	int rd, value, size = sizeof(struct input_event);
+	struct input_event ev[64];
+	int i;
+	while (1){
+		if ((rd = read (mainbuttonfd, ev, sizeof(ev))) < size) {
+			print("read %d instead of %d\n", rd, size);
+			sleep(1);
+		}
+
+		for (i = 0; i < rd / size; i++) {
+			//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+			if (ev[i].code == 0x74) {
+				if (ev[i].value == 1) {
+					powerbuttonpress = 1;
+				}
+				else if (ev[i].value == 0) {
+					if (powerbuttonpress == 1) {
+						if (type == 's') {
+							FILE * power;
+							power = fopen("/sys/power/state", "w");
+							if (on == 1) {
+								fwrite("mem\n", 1, 4, power);
+								on = 0;
+							} else {
+								fwrite("on\n", 1, 3, power);
+								on = 1;
+							}
+							fclose(power);
+						} else if (type == 'c') {
+							FILE * brightness;
+							brightness = fopen("/sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness", "w");
+							if (on == 1) {
+								fwrite("0\n", 1, 2, brightness);
+								printf("Warning: avoided changing power state; instead brightness changed\n");
+								on = 0;
+							} else {
+								fwrite("255\n", 1, 4, brightness);
+								on = 1;
+							}
+							fclose(brightness);
+						} else if (type == 'e') {
+							FILE * power;
+							power = fopen("/sys/power/state", "w");
+							if (on == 1) {
+								fwrite("mem\n", 1, 4, power);
+								on = 0;
+							} else {
+								fwrite("on\n", 1, 3, power);
+								on = 1;
+							}
+							fclose(power);
+						} else {
+							FILE * power;
+							power = fopen("/sys/power/state", "w");
+							if (on == 1) {
+								fwrite("mem\n", 1, 4, power);
+								on = 0;
+							} else {
+								fwrite("on\n", 1, 3, power);
+								on = 1;
+							}
+							fclose(power);
+						}
+					}
+					powerbuttonpress = 0;
+				}
+			}
+		}
+	}
+}
+
+static void readhomebutton(void* v)
+{
+	int rd, value, size = sizeof(struct input_event);
+	struct input_event ev[64];
+	int i;
+	while (1){
+		if ((rd = read (homebuttonfd, ev, sizeof(ev))) < size) {
+			print("read %d instead of %d\n", rd, size);
+			sleep(1);
+		}
+		for (i = 0; i < rd / size; i++) {
+			//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+			if (powerbuttonpress == 1 && ev[i].code == 0x66 /* && ev[i].value == 1 */) {
+				exit (1);
+			}
+		}
+    }
+}
+
+static void readvolbutton(void* v)
+{
+	int rd, value, size = sizeof(struct input_event);
+	struct input_event ev[64];
+	int i;
+	while (1){
+		if ((rd = read (volbuttonfd, ev, sizeof(ev))) < size) {
+			print("read %d instead of %d\n", rd, size);
+			sleep(1);
+		}
+		for (i = 0; i < rd / size; i++) {
+			//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+			if (powerbuttonpress == 1 && ev[i].code == 0x72 /* && ev[i].value == 1 */) {
+				char* args[3] = {"/system/bin/reboot", "-p", NULL};
+				execve(args[0], args, NULL);
+			}
+		}
     }
 }
 
@@ -210,6 +331,16 @@ uchar* attachscreen ( Rectangle *rect, ulong *chan, int *depth, int *width, int 
 
 	eventfd = open(mousefile, O_RDONLY);
 	kproc("readmouse", fbreadmouse, nil, 0);
+
+	sprintf(mainbuttoninput, "/dev/input/event%d", maineventnum);
+	mainbuttonfd = open(mainbuttoninput, O_RDONLY);
+	kproc("readbutton", readbutton, nil, 0);
+
+	homebuttonfd = open(homedevice, O_RDONLY);
+	kproc("readhomebutton", readhomebutton, nil, 0);
+
+	volbuttonfd = open(voldevice, O_RDONLY);
+	kproc("readvolbutton", readvolbutton, nil, 0);
 
 	if (type == 's') {
 		xadjust = 3; //shifts mouse left

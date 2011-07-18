@@ -99,6 +99,8 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	if(argv == nil)
 		argv = "wm/toolbar" :: nil;
 	spawn command(clientctxt, argv, sync);
+	argv = "wm/windowbar" :: nil;
+	spawn command(clientctxt, argv, sync);
 	if((e := <-sync) != nil)
 		fatal("cannot run command: " + e);
 

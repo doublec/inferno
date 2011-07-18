@@ -149,8 +149,8 @@ init(ctxt: ref Draw->Context, argv: list of string)
 			"fail:*" =>	;
 			}
 		}
-#	detask := <-task =>
-#		deiconify(detask);
+	detask := <-task =>
+		deiconify(detask);
 	(off, data, nil, wc) := <-snarfIO.write =>
 		if(wc == nil)
 			break;
@@ -204,7 +204,7 @@ wmctl(top: ref Tk->Toplevel, c: string)
 		;
 	"delclient" =>
 		# delclient id
-#		deiconify(hd tl args);
+		deiconify(hd tl args);
 	"rect" =>
 		tkclient->wmctl(top, c);
 		layout(top);
@@ -221,45 +221,44 @@ handlerequest(clientid: string, args: list of string): string
 		# task name
 		if(n != 2)
 			return "no task label given";
-#		iconify(clientid, hd tl args);
+		iconify(clientid, hd tl args);
 	"untask" or
 	"unhide" =>
-#		deiconify(clientid);
+		deiconify(clientid);
 	* =>
 		return "unknown request";
 	}
 	return nil;
 }
 
-#iconify(id, label: string)
-#{
-#	label = condenselabel(label);
-#	e := tk->cmd(tbtop, "button .toolbar." +id+" -command {send task "+id+"} -takefocus 0");
-#	cmd(tbtop, ".toolbar." +id+" configure -text '" + label);
-#	if(e[0] != '!')
-#		cmd(tbtop, "pack .toolbar."+id+" -side left -fill y");
-#	cmd(tbtop, "update");
-#}
+iconify(id, label: string)
+{
+	label = condenselabel(label);
+	e := tk->cmd(tbtop, "button .toolbar." +id+" -command {send task "+id+"} -takefocus 0");
+	cmd(tbtop, ".toolbar." +id+" configure -text '" + label);
+	if(e[0] != '!')
+		cmd(tbtop, "pack .toolbar."+id+" -side left -fill y");
+	cmd(tbtop, "update");
+}
 
-#deiconify(id: string)
-#{
-#	e := tk->cmd(tbtop, "destroy .toolbar."+id);
-#	if(e == nil){
-#		tkclient->wmctl(tbtop, sys->sprint("ctl %q untask", id));
-#		tkclient->wmctl(tbtop, sys->sprint("ctl %q kbdfocus 1", id));
-#	}
-#	cmd(tbtop, "update");
-#}
+deiconify(id: string)
+{
+	e := tk->cmd(tbtop, "destroy .toolbar."+id);
+	if(e == nil){
+		tkclient->wmctl(tbtop, sys->sprint("ctl %q untask", id));
+		tkclient->wmctl(tbtop, sys->sprint("ctl %q kbdfocus 1", id));
+	}
+	cmd(tbtop, "update");
+}
 
 layout(top: ref Tk->Toplevel)
 {
-	# toolbar setup
 	r := top.screenr;
 	h := 64;
 	if(r.dy() < 480)
 		h = tk->rect(top, ".b", Tk->Border|Tk->Required).dy();
 	cmd(top, ". configure -x " + string r.min.x +
-			" -y " + string (r.min.y) +
+			" -y " + string (r.max.y - h) +
 			" -width " + string r.dx() +
 			" -height " + string h);
 	cmd(top, "update");
@@ -272,11 +271,14 @@ toolbar(ctxt: ref Draw->Context, startmenu: int,
 	(tbtop, nil) = tkclient->toplevel(ctxt, nil, nil, Tkclient->Plain);
 	screenr = tbtop.screenr;
 
+	cmd(tbtop, "button .b -text {XXX}");
+	cmd(tbtop, "pack propagate . 0");
+
 	tk->namechan(tbtop, exec, "exec");
+	tk->namechan(tbtop, task, "task");
 	cmd(tbtop, "frame .toolbar");
 	if (startmenu) {
-		# menu button setup
-		cmd(tbtop, "menubutton .toolbar.start -menu .m -borderwidth 0 -bitmap vitasmall.bit -width " + string screenr.dx() + " -height 64");
+		cmd(tbtop, "menubutton .toolbar.start -menu .m -borderwidth 0 -bitmap vitasmall.bit -width 0 -height 64");
 		cmd(tbtop, "pack .toolbar.start -side left");
 	}
 	cmd(tbtop, "pack .toolbar -fill x");
@@ -513,7 +515,8 @@ consoleproc(ctxt: ref Draw->Context, sync: chan of string)
 				" -y " + string (r.dy() / 3 + top.screenr.min.y));
 
 	tkclient->startinput(top, "ptr"::"kbd"::nil);
-#	tkclient->onscreen(top, "onscreen");
+	tkclient->onscreen(top, "onscreen");
+	tkclient->wmctl(top, "task");
 
 	for(;;) alt {
 	c := <-titlectl or
