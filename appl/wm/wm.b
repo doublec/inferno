@@ -122,6 +122,9 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	for(;;) alt {
 	s := <- minimize_win =>
 		if(kbdfocus != nil) {
+			if(kbdfocus.id == 1) {
+				break;
+			}
 			kbdfocus.ctl <-= "task";
 			old := kbdfocus;
 			kbdfocus = nil;
