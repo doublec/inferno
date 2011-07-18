@@ -493,55 +493,55 @@ nlines := 0;		# transcript length
 
 consoleproc(ctxt: ref Draw->Context, sync: chan of string)
 {
-	iostdout := sys->file2chan("/chan", "wmstdout");
-	if(iostdout == nil){
-		sync <-= sys->sprint("cannot make /chan/wmstdout: %r");
-		return;
-	}
-	iostderr := sys->file2chan("/chan", "wmstderr");
-	if(iostderr == nil){
-		sync <-= sys->sprint("cannot make /chan/wmstdout: %r");
-		return;
-	}
+#	iostdout := sys->file2chan("/chan", "wmstdout");
+#	if(iostdout == nil){
+#		sync <-= sys->sprint("cannot make /chan/wmstdout: %r");
+#		return;
+#	}
+#	iostderr := sys->file2chan("/chan", "wmstderr");
+#	if(iostderr == nil){
+#		sync <-= sys->sprint("cannot make /chan/wmstdout: %r");
+#		return;
+#	}
 
 	sync <-= nil;
 
-	(top, titlectl) := tkclient->toplevel(ctxt, "", "Log", tkclient->Appl); 
-	for(i := 0; i < len con_cfg; i++)
-		cmd(top, con_cfg[i]);
+#	(top, titlectl) := tkclient->toplevel(ctxt, "", "Log", tkclient->Appl); 
+#	for(i := 0; i < len con_cfg; i++)
+#		cmd(top, con_cfg[i]);
 
-	r := tk->rect(top, ".", Tk->Border|Tk->Required);
-	cmd(top, ". configure -x " + string ((top.screenr.dx() - r.dx()) / 2 + top.screenr.min.x) +
-				" -y " + string (r.dy() / 3 + top.screenr.min.y));
+#	r := tk->rect(top, ".", Tk->Border|Tk->Required);
+#	cmd(top, ". configure -x " + string ((top.screenr.dx() - r.dx()) / 2 + top.screenr.min.x) +
+#				" -y " + string (r.dy() / 3 + top.screenr.min.y));
 
-	tkclient->startinput(top, "ptr"::"kbd"::nil);
-	tkclient->onscreen(top, "onscreen");
-	tkclient->wmctl(top, "task");
+#	tkclient->startinput(top, "ptr"::"kbd"::nil);
+#	tkclient->onscreen(top, "onscreen");
+#	tkclient->wmctl(top, "task");
 
-	for(;;) alt {
-	c := <-titlectl or
-	c = <-top.wreq or
-	c = <-top.ctxt.ctl =>
-		if(c == "exit")
-			c = "task";
-		tkclient->wmctl(top, c);
-	c := <-top.ctxt.kbd =>
-		tk->keyboard(top, c);
-	p := <-top.ctxt.ptr =>
-		tk->pointer(top, *p);
-	(nil, nil, nil, rc) := <-iostdout.read =>
-		if(rc != nil)
-			rc <-= (nil, "inappropriate use of file");
-	(nil, nil, nil, rc) := <-iostderr.read =>
-		if(rc != nil)
-			rc <-= (nil, "inappropriate use of file");
-	(nil, data, nil, wc) := <-iostdout.write =>
-		conout(top, data, wc);
-	(nil, data, nil, wc) := <-iostderr.write =>
-		conout(top, data, wc);
-		if(wc != nil)
-			tkclient->wmctl(top, "untask");
-	}
+#	for(;;) alt {
+#	c := <-titlectl or
+#	c = <-top.wreq or
+#	c = <-top.ctxt.ctl =>
+#		if(c == "exit")
+#			c = "task";
+#		tkclient->wmctl(top, c);
+#	c := <-top.ctxt.kbd =>
+#		tk->keyboard(top, c);
+#	p := <-top.ctxt.ptr =>
+#		tk->pointer(top, *p);
+#	(nil, nil, nil, rc) := <-iostdout.read =>
+#		if(rc != nil)
+#			rc <-= (nil, "inappropriate use of file");
+#	(nil, nil, nil, rc) := <-iostderr.read =>
+#		if(rc != nil)
+#			rc <-= (nil, "inappropriate use of file");
+#	(nil, data, nil, wc) := <-iostdout.write =>
+#		conout(top, data, wc);
+#	(nil, data, nil, wc) := <-iostderr.write =>
+#		conout(top, data, wc);
+#		if(wc != nil)
+#			tkclient->wmctl(top, "untask");
+#	}
 }
 
 conout(top: ref Tk->Toplevel, data: array of byte, wc: Sys->Rwrite)
