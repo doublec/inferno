@@ -151,9 +151,12 @@ option(int argc, char *argv[], void (*badusage)(void))
 			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
 		}
 		else if (type == 'c') {
-			eventfiles = malloc(2*sizeof(char *));
+			eventfiles = malloc(5*sizeof(char *));
 			eventfiles[0] = "/dev/input/event0";
-			eventfiles[1] = NULL;
+			eventfiles[1] = "/dev/input/event1";
+			eventfiles[2] = "/dev/input/event2";
+			eventfiles[3] = "/dev/input/event3";
+			eventfiles[4] = NULL;
 			displaydepth = 32;
 			geom("600x1024");
 			rotation_opt = 1;

@@ -1,10 +1,8 @@
-# TODO: handle clients closing file
 implement ButtonServer;
 
 include "sys.m";
 sys : Sys;
 include "draw.m";
-include "arg.m";
 include "styx.m";
 styx: Styx;
 Rmsg, Tmsg: import styx;
@@ -15,7 +13,10 @@ nametree: Nametree;
 Tree: import nametree;
 include "cfg.m";
 cfg: Cfg;
+include "arg.m";
+arg : Arg;
 
+cfgfile := "/etc/buttonserver.cfg";
 mntflg := Sys->MBEFORE;
 mntpt := "/dev";
 Qroot, Qbuttons : con big iota;
@@ -43,9 +44,17 @@ init(nil: ref Draw->Context, args: list of string)
 	styxservers->init(styx);
 	nametree = load Nametree Nametree->PATH;
 	nametree->init();
+	arg = load Arg Arg->PATH;
+	arg->init(args);
+	while((c := arg->opt()) != 0) {
+		case c {
+		'c' => cfgfile = arg->arg();
+		* => sys->print("unrecognized option %c\n", c);
+		}
+	}
 	cfg = load Cfg Cfg->PATH;
-	if(cfg->init("/etc/buttonserver.cfg") != "") {
-		raise "could not access configuration file";
+	if(cfg->init(cfgfile) != "") {
+		raise sys->sprint("could not access configuration file %s", cfgfile);
 	}
 
 	for(i := 0; i < MAX_READERS; i++) {
