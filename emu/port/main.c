@@ -132,6 +132,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 	case 't':
 		cp = EARGF(badusage());
 		type = cp[0];
+		tkfont = "/fonts/pelm/ascii.12.font";
 		if (type == 's') {
 			eventfiles = malloc(7*sizeof(char *));
 			eventfiles[0] = "/dev/input/event0";
@@ -151,6 +152,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
 		}
 		else if (type == 'c') {
+			system("cp /data/inferno/etc/buttonserver-nook-color.cfg /data/inferno/etc/buttonserver.cfg");
 			eventfiles = malloc(5*sizeof(char *));
 			eventfiles[0] = "/dev/input/event0";
 			eventfiles[1] = "/dev/input/event1";

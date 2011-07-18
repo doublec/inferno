@@ -105,9 +105,9 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	}
 
 	exec := chan of string;
-	task := chan of string;
+#	task := chan of string;
 
-	tbtop = toolbar(ctxt, startmenu, exec, task);
+	tbtop = toolbar(ctxt, startmenu, exec, nil);
 	tkclient->startinput(tbtop, "ptr" :: "control" :: nil);
 	layout(tbtop);
 
