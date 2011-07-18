@@ -95,14 +95,25 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		fatal(sys->sprint("cannot make /chan/wmrect: %r"));
 
 	sync := chan of string;
+	sync_wb := chan of string;
+	sync_bsrv := chan of string;
 	argv = tl argv;
 	if(argv == nil)
 		argv = "wm/toolbar" :: nil;
 	spawn command(clientctxt, argv, sync);
+	if((e := <- sync) != nil)
+		fatal("cannot run command " + hd argv + ": " + e);
+	# FIXME: this is the wrong place to put this
+	# need to look for a place where buttonserver will be run on startup
+	argv = "buttonserver" :: nil;
+	spawn command(clientctxt, argv, sync_bsrv);
+	if((e = <- sync_bsrv) != nil)
+		fatal("cannot run command " + hd argv + ": " + e);
 	argv = "wm/windowbar" :: nil;
-	spawn command(clientctxt, argv, sync);
-	if((e := <-sync) != nil)
-		fatal("cannot run command: " + e);
+	spawn command(clientctxt, argv, sync_wb);
+	if((e = <- sync_wb) != nil)
+		fatal("cannot run command " + hd argv + ": " + e);
+
 
 	fakekbd = chan of string;
 
@@ -716,14 +727,27 @@ command(ctxt: ref Draw->Context, args: list of string, sync: chan of string)
 
 monitor_button(ch : chan of string)
 {
-	fd := sys->open("/dev/events", sys->OREAD);
+	fd : ref Sys->FD;
+	while(sys->sleep(1) == 0) { # hack to wait till buttonserver is ready
+		fd = sys->open("/dev/buttons", sys->OREAD);
+#		if(fd == nil) {
+#			sys->print("could not open /dev/buttons: %r\n");
+#			return;
+#		}
+		if(fd != nil) {
+			break;
+		}
+	}
 	while(1) {
 		newstr : string;
 		buf := array[64] of byte;
 		n := sys->read(fd, buf, len buf);
+		if(n == 0) {
+			return;
+		}
 		buf = buf[:n];
 		str := string buf;
-		if(strstr(str, "0 1 102 1") != -1) {
+		if(strstr(str, "home press") != -1) {
 			ch <-= "minimize";
 		}
 	}
