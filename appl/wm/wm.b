@@ -98,10 +98,13 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	sync_wb := chan of string;
 	sync_bsrv := chan of string;
 	argv = tl argv;
-	if(argv == nil)
-		argv = "wm/toolbar" :: nil;
+	argv = "wm/windowbar" :: nil;
+	spawn command(clientctxt, argv, sync_wb);
+	if((e := <- sync_wb) != nil)
+		fatal("cannot run command " + hd argv + ": " + e);
+	argv = "wm/toolbar" :: nil;
 	spawn command(clientctxt, argv, sync);
-	if((e := <- sync) != nil)
+	if((e = <- sync) != nil)
 		fatal("cannot run command " + hd argv + ": " + e);
 	# FIXME: this is the wrong place to put this
 	# need to look for a place where buttonserver will be run on startup
@@ -109,11 +112,6 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	spawn command(clientctxt, argv, sync_bsrv);
 	if((e = <- sync_bsrv) != nil)
 		fatal("cannot run command " + hd argv + ": " + e);
-	argv = "wm/windowbar" :: nil;
-	spawn command(clientctxt, argv, sync_wb);
-	if((e = <- sync_wb) != nil)
-		fatal("cannot run command " + hd argv + ": " + e);
-
 
 	fakekbd = chan of string;
 
