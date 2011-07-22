@@ -173,6 +173,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	"scrollbar .schedf.tf.scroll -command {.schedf.tf.t yview}",
 	"text .schedf.tf.t -wrap word -yscrollcommand {.schedf.tf.scroll set} -height 7h -width 20w",
 	"bind .schedf.tf.t <Key> +{send cmd dirty}",
+	". configure -width " + string top.screenr.dx() + " -height " + string (top.screenr.dy() / 2),
 	};
 	tkcmds(top, wincmds);
 	(cal, calch) := Cal.make(top, sched, ".cf.cal");
@@ -481,8 +482,10 @@ Cal.make(top: ref Tk->Toplevel, sched: ref Schedule, w: string): (ref Cal, chan 
 	}
 	cal := ref Cal;
 	cal.w = w;
-	cal.dx = maxw;
-	cal.dy = f.height;
+#	cal.dx = maxw;
+#	cal.dy = f.height;
+	cal.dx = top.screenr.dx() / 7;
+	cal.dy = top.screenr.dy() / 14;
 	cal.onepos = 0;
 	cal.top = top;
 	cal.sched = sched;

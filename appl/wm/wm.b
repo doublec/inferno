@@ -118,16 +118,10 @@ init(ctxt: ref Draw->Context, argv: list of string)
 				sys->print("iter\n");
 				if(z != old && z.id != 0) {
 					sys->print("found client %d\n", z.id);
-					kbdfocus = z;
 					break;
 				}
 			}
-			old.ctl <-= "haskbdfocus 0";
-			if(kbdfocus != nil) {
-				sys->print("giving kbdfocus\n");
-				kbdfocus.ctl <-= "haskbdfocus 1";
-				kbdfocus.ctl <-= "raise";
-			}
+			setfocus(win, z);
 		}
 	c := <-win.ctl or
 	c = <-wmctxt.ctl =>
@@ -717,6 +711,7 @@ command(ctxt: ref Draw->Context, args: list of string, sync: chan of string)
 
 monitor_button(ch : chan of string)
 {
+	last := 0;
 	fd := sys->open("/dev/events", sys->OREAD);
 	while(1) {
 		newstr : string;
@@ -725,7 +720,12 @@ monitor_button(ch : chan of string)
 		buf = buf[:n];
 		str := string buf;
 		if(strstr(str, "0 1 102 1") != -1) {
-			ch <-= "minimize";
+			if (last == 0) {
+				last = 1;
+			} else {
+				ch <-= "minimize";
+				last = 0;
+			}
 		}
 	}
 }
