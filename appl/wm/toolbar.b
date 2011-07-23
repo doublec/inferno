@@ -54,6 +54,7 @@ menu := array[] of {
 	"Shell", "wm/sh",
 	"Keyboard", "wm/keyboard",
 	"Acme", "acme",
+	"Calendar", "wm/calendar",
 	"->System", "folder:1",
 	"->Misc", "folder:2",
 	"->Games", "folder:3"
