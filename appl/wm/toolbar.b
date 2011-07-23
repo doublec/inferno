@@ -39,6 +39,39 @@ defaultscript :=
 
 tbtop: ref Tk->Toplevel;
 screenr: Rect;
+channel: ref Tk->Toplevel;
+context : ref Draw->Context;
+launched := 0;
+
+whichmenu := 0;
+# Name, command
+menu := array[] of {
+	array[] of { # folder 0 / default
+	"Files", "wm/ftree",
+	"Edit", "wm/edit",
+	"Charon", "charon",
+	"Manual", "wm/man",
+	"Shell", "wm/sh",
+	"Keyboard", "wm/keyboard",
+	"Acme", "acme",
+	"->System", "folder:1",
+	"->Misc", "folder:2",
+	"->Games", "folder:3"
+	}, array[] of { # folder 1
+	"Debugger", "wm/deb",
+	"Module manager", "wm/rt",
+	"Task manager", "wm/task",
+	"Memory monitor", "wm/memory",
+	"About", "wm/about"
+	}, array[] of { # folder2
+	"Clock", "wm/date",
+	"Colors", "wm/colors",
+	"Coffee", "wm/coffee"
+	}, array[] of { # folder 3
+	"Tetris", "wm/tetris",
+	"Bounce", "wm/bounce"
+	}
+};
 
 badmodule(p: string)
 {
@@ -105,12 +138,12 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	}
 
 	exec := chan of string;
-#	task := chan of string;
+	launchchannel := chan of string;
 
 	tbtop = toolbar(ctxt, startmenu, exec, nil);
 	tkclient->startinput(tbtop, "ptr" :: "control" :: nil);
 	layout(tbtop);
-
+	
 	shctxt := Context.new(ctxt);
 	shctxt.addmodule("wm", myselfbuiltin);
 
@@ -130,6 +163,8 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	donesetup := 0;
 	spawn setup(shctxt, setupfinished);
 
+	cmd := chan of string;
+
 	snarf: array of byte;
 #	write("/prog/"+string sys->pctl(0, nil)+"/ctl", "restricted"); # for testing
 	for(;;) alt{
@@ -142,6 +177,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		wmctl(tbtop, s);
 	s := <-exec =>
 		# guard against parallel access to the shctxt environment
+		sys->fprint(sys->fildes(2), "s = %s", s);
 		if (donesetup){
 			{
  				shctxt.run(ref Listnode(nil, s) :: nil, 0);
@@ -149,8 +185,11 @@ init(ctxt: ref Draw->Context, argv: list of string)
 			"fail:*" =>	;
 			}
 		}
-#	detask := <-task =>
-#		deiconify(detask);
+		if (s == "launcher") {
+			launcher(tbtop, launchchannel, whichmenu);
+		}
+	cmd := <-launchchannel =>
+		launch(ctxt, cmd, tbtop, launchchannel);
 	(off, data, nil, wc) := <-snarfIO.write =>
 		if(wc == nil)
 			break;
@@ -186,25 +225,16 @@ wmctl(top: ref Tk->Toplevel, c: string)
 	args := str->unquoted(c);
 	if(args == nil)
 		return;
-	n := len args;
 
 	case hd args{
 	"request" =>
 		# request clientid args...
-		if(n < 3)
-			return;
-		args = tl args;
-		clientid := hd args;
-		args = tl args;
-		err := handlerequest(clientid, args);
-		if(err != nil)
-			sys->fprint(sys->fildes(2), "toolbar: bad wmctl request %#q: %s\n", c, err);
 	"newclient" =>
 		# newclient id
 		;
 	"delclient" =>
 		# delclient id
-#		deiconify(hd tl args);
+		;
 	"rect" =>
 		tkclient->wmctl(top, c);
 		layout(top);
@@ -213,55 +243,8 @@ wmctl(top: ref Tk->Toplevel, c: string)
 	}
 }
 
-handlerequest(clientid: string, args: list of string): string
-{
-	n := len args;
-	case hd args {
-	"task" =>
-		# task name
-		if(n != 2)
-			return "no task label given";
-#		iconify(clientid, hd tl args);
-	"untask" or
-	"unhide" =>
-#		deiconify(clientid);
-	* =>
-		return "unknown request";
-	}
-	return nil;
-}
-
-#iconify(id, label: string)
-#{
-#	label = condenselabel(label);
-#	e := tk->cmd(tbtop, "button .toolbar." +id+" -command {send task "+id+"} -takefocus 0");
-#	cmd(tbtop, ".toolbar." +id+" configure -text '" + label);
-#	if(e[0] != '!')
-#		cmd(tbtop, "pack .toolbar."+id+" -side left -fill y");
-#	cmd(tbtop, "update");
-#}
-
-#deiconify(id: string)
-#{
-#	e := tk->cmd(tbtop, "destroy .toolbar."+id);
-#	if(e == nil){
-#		tkclient->wmctl(tbtop, sys->sprint("ctl %q untask", id));
-#		tkclient->wmctl(tbtop, sys->sprint("ctl %q kbdfocus 1", id));
-#	}
-#	cmd(tbtop, "update");
-#}
-
 layout(top: ref Tk->Toplevel)
 {
-	# toolbar setup
-	r := top.screenr;
-	h := 64;
-	if(r.dy() < 480)
-		h = tk->rect(top, ".b", Tk->Border|Tk->Required).dy();
-	cmd(top, ". configure -x " + string r.min.x +
-			" -y " + string (r.min.y) +
-			" -width " + string r.dx() +
-			" -height " + string h);
 	cmd(top, "update");
 	tkclient->onscreen(tbtop, "exact");
 }
@@ -273,15 +256,66 @@ toolbar(ctxt: ref Draw->Context, startmenu: int,
 	screenr = tbtop.screenr;
 
 	tk->namechan(tbtop, exec, "exec");
+
 	cmd(tbtop, "frame .toolbar");
 	if (startmenu) {
-		# menu button setup
-		cmd(tbtop, "menubutton .toolbar.start -menu .m -borderwidth 0 -bitmap vitasmall.bit -width " + string screenr.dx() + " -height 64");
-		cmd(tbtop, "pack .toolbar.start -side left");
+		# button setup
+		cmd(tbtop, "button .toolbar.start -borderwidth 0 -bitmap vitasmall.bit -width " + string screenr.dx() + " -height 64 -command {send exec launcher}");
+		cmd(tbtop, "pack .toolbar.start -side left -in .toolbar");
 	}
-	cmd(tbtop, "pack .toolbar -fill x");
-	cmd(tbtop, "menu .m");
+	cmd(tbtop, "pack .toolbar -fill x -in .");
+
 	return tbtop;
+}
+
+launcher(tbtop:ref Tk->Toplevel, launchchannel: chan of string, whichmenu: int)
+{
+	if(launched == 1) {
+		cmd(tbtop, "destroy .launcher");
+		launched = 0;
+		cmd(tbtop, ".toolbar configure -borderwidth 0");
+		cmd(tbtop, "update");
+		return;
+	}
+
+	tk->namechan(tbtop, launchchannel, "channel");
+
+	cmd(tbtop, ".toolbar.start configure -borderwidth 1");
+
+	cmd(tbtop, "frame .launcher");
+	for(i := 0; i * 4 < len menu[whichmenu]; i++) {
+		j := (i * 4);
+		cmd(tbtop, sys->sprint("frame .launcher.line%d", i));
+		if (j + 2 == len menu[whichmenu]) {
+			cmd(tbtop, sys->sprint("button .launcher.line%d.b1 -borderwidth 1 -text %s -height 64 -width %d -command {send channel %s}", i, menu[whichmenu][j], screenr.dx(), menu[whichmenu][j + 1]));
+			cmd(tbtop, sys->sprint("pack .launcher.line%d.b1 -side left -in .launcher.line%d", i, i));
+		} else {
+			cmd(tbtop, sys->sprint("button .launcher.line%d.b1 -borderwidth 1 -text %s -height 64 -width %d -command {send channel %s}", i, menu[whichmenu][j], (screenr.dx() / 2), menu[whichmenu][j + 1]));
+			cmd(tbtop, sys->sprint("button .launcher.line%d.b2 -borderwidth 1 -text %s -height 64 -width %d -command {send channel %s}", i, menu[whichmenu][j + 2], (screenr.dx() / 2), menu[whichmenu][j + 3]));
+			cmd(tbtop, sys->sprint("pack .launcher.line%d.b1 .launcher.line%d.b2 -side left -in .launcher.line%d", i, i, i));
+		}
+		cmd(tbtop, sys->sprint("pack .launcher.line%d -fill x -in .launcher", i));
+	}
+	cmd(tbtop, "pack .launcher -fill x -in .");
+	cmd(tbtop, "update");
+
+	launched = 1;
+}
+
+launch(ctxt: ref Draw->Context, appl: string, tbtop: ref Tk->Toplevel, launchchannel: chan of string)
+{
+	if (len appl == 8 && appl[:7] == "folder:") {
+		whichmenu = int sys->sprint("%c", appl[7]);
+		launcher(tbtop, launchchannel, whichmenu);
+		launcher(tbtop, launchchannel, whichmenu);
+		whichmenu = 0;
+		return;
+	}
+	sh := load Sh Sh->PATH;
+	argv := appl :: nil;
+	sh->run(ctxt, "{$*&}" :: argv);
+
+	launcher(tbtop, launchchannel, whichmenu);
 }
 
 setup(shctxt: ref Context, finished: chan of int)
@@ -335,10 +369,6 @@ whatis(nil: ref Sh->Context, nil: Sh, nil: string, nil: int): string
 runbuiltin(c: ref Context, sh: Sh,
 			cmd: list of ref Listnode, nil: int): string
 {
-	case (hd cmd).word {
-	"menu" =>	return builtin_menu(c, sh, cmd);
-	"delmenu" =>	return builtin_delmenu(c, sh, cmd);
-	}
 	return nil;
 }
 
@@ -362,66 +392,6 @@ word(ln: ref Listnode): string
 	return nil;
 }
 
-menupath(title: string): string
-{
-	mpath := ".m."+title;
-	for(j := 0; j < len mpath; j++)
-		if(mpath[j] == ' ')
-			mpath[j] = '_';
-	return mpath;
-}
-
-builtin_menu(nil: ref Context, nil: Sh, argv: list of ref Listnode): string
-{
-	n := len argv;
-	if (n < 3 || n > 4) {
-		sys->fprint(stderr(), "usage: menu topmenu [ secondmenu ] command\n");
-		raise "fail:usage";
-	}
-	primary := (hd tl argv).word;
-	argv = tl tl argv;
-
-	if (n == 3) {
-		w := word(hd argv);
-		if (len w == 0)
-			cmd(tbtop, ".m insert 0 separator");
-		else
-			cmd(tbtop, ".m insert 0 command -label " + tk->quote(primary) +
-				" -command {send exec " + w + "}");
-	} else {
-		secondary := (hd argv).word;
-		argv = tl argv;
-
-		mpath := menupath(primary);
-		e := tk->cmd(tbtop, mpath+" cget -width");
-		if(e[0] == '!') {
-			cmd(tbtop, "menu "+mpath);
-			cmd(tbtop, ".m insert 0 cascade -label "+tk->quote(primary)+" -menu "+mpath);
-		}
-		w := word(hd argv);
-		if (len w == 0)
-			cmd(tbtop, mpath + " insert 0 separator");
-		else
-			cmd(tbtop, mpath+" insert 0 command -label "+tk->quote(secondary)+
-				" -command {send exec "+w+"}");
-	}
-	return nil;
-}
-
-builtin_delmenu(nil: ref Context, nil: Sh, nil: list of ref Listnode): string
-{
-	delmenu(".m");
-	cmd(tbtop, "menu .m");
-	return nil;
-}
-
-delmenu(m: string)
-{
-	for (i := int cmd(tbtop, m + " index end"); i >= 0; i--)
-		if (cmd(tbtop, m + " type " + string i) == "cascade")
-			delmenu(cmd(tbtop, m + " entrycget " + string i + " -menu"));
-	cmd(tbtop, "destroy " + m);
-}
 
 getself(): Shellbuiltin
 {

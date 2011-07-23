@@ -15,4 +15,4 @@ utils/mk/mk
 Linux/386/bin/mkext
 *.sbl
 parallel-push
-appl/wm/toolbar.b.old
+appl/wm/toolbar.old
