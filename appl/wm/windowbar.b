@@ -149,6 +149,8 @@ init(ctxt: ref Draw->Context, argv: list of string)
 			"fail:*" =>	;
 			}
 		}
+		if (s == "batterystatus")
+			updatebattery(ctxt, tbtop);
 	detask := <-task =>
 		deiconify(detask);
 	(off, data, nil, wc) := <-snarfIO.write =>
@@ -278,12 +280,42 @@ toolbar(ctxt: ref Draw->Context, startmenu: int,
 	tk->namechan(tbtop, task, "task");
 	cmd(tbtop, "frame .toolbar");
 	if (startmenu) {
-		cmd(tbtop, "menubutton .toolbar.start -menu .m -borderwidth 0 -bitmap vitasmall.bit -width 0 -height 64");
-		cmd(tbtop, "pack .toolbar.start -side left");
+		sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/battery/capacity > /batterylevel.txt"));
+		batterylevel : ref Sys->FD;
+		batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
+		battery := array[64] of byte;
+		length := sys->read(batterylevel, battery, len battery);
+		if (length == 0) {
+			sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/max17042-0/capacity > /batterylevel.txt"));
+			batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
+			length = sys->read(batterylevel, battery, len battery);
+		}
+		battery = battery[:(length - 1)];
+		sys->fprint(sys->fildes(2), "1\n");
+		level := string battery;
+		cmd(tbtop, "button .toolbar.battery -text " + string level + "% -borderwidth 0 -width 64 -height 64 -command {send exec batterystatus}");
+		cmd(tbtop, "pack .toolbar.battery -side left");
 	}
 	cmd(tbtop, "pack .toolbar -fill x");
-	cmd(tbtop, "menu .m");
 	return tbtop;
+}
+
+updatebattery(ctxt: ref Draw->Context, tbtop: ref Tk->Toplevel)
+{
+	sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/battery/capacity > /batterylevel.txt"));
+	batterylevel : ref Sys->FD;
+	batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
+	battery := array[64] of byte;
+	length := sys->read(batterylevel, battery, len battery);
+	if (length == 0) {
+		sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/max17042-0/capacity > /batterylevel.txt"));
+		batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
+		length = sys->read(batterylevel, battery, len battery);
+	}
+	battery = battery[:(length - 1)];
+	level := string battery;
+	cmd(tbtop, ".toolbar.battery configure -text " + string level + "%");
+	cmd(tbtop, "update");
 }
 
 setup(shctxt: ref Context, finished: chan of int)
@@ -385,11 +417,6 @@ builtin_menu(nil: ref Context, nil: Sh, argv: list of ref Listnode): string
 
 	if (n == 3) {
 		w := word(hd argv);
-		if (len w == 0)
-			cmd(tbtop, ".m insert 0 separator");
-		else
-			cmd(tbtop, ".m insert 0 command -label " + tk->quote(primary) +
-				" -command {send exec " + w + "}");
 	} else {
 		secondary := (hd argv).word;
 		argv = tl argv;
@@ -398,7 +425,6 @@ builtin_menu(nil: ref Context, nil: Sh, argv: list of ref Listnode): string
 		e := tk->cmd(tbtop, mpath+" cget -width");
 		if(e[0] == '!') {
 			cmd(tbtop, "menu "+mpath);
-			cmd(tbtop, ".m insert 0 cascade -label "+tk->quote(primary)+" -menu "+mpath);
 		}
 		w := word(hd argv);
 		if (len w == 0)

@@ -484,7 +484,7 @@ consoleproc(ctxt: ref Draw->Context, sync: chan of string)
 				" -y " + string (r.dy() / 3 + top.screenr.min.y));
 
 	tkclient->startinput(top, "ptr"::"kbd"::nil);
-	tkclient->onscreen(top, "onscreen");
+#	tkclient->onscreen(top, "onscreen");
 	tkclient->wmctl(top, "task");
 
 	for(;;) alt {
