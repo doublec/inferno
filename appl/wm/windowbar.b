@@ -1,4 +1,4 @@
-implement Toolbar;
+implement Windowbar;
 include "sys.m";
 	sys: Sys;
 include "draw.m";
@@ -17,7 +17,7 @@ include "arg.m";
 
 myselfbuiltin: Shellbuiltin;
 
-Toolbar: module 
+Windowbar: module 
 {
 	init:	fn(ctxt: ref Draw->Context, argv: list of string);
 	initbuiltin: fn(c: ref Context, sh: Sh): string;
@@ -31,18 +31,12 @@ Toolbar: module
 
 MAXCONSOLELINES:	con 1024;
 
-# execute this if no menu items have been created
-# by the init script.
-defaultscript :=
-	"{menu shell " +
-		"{{autoload=std; load $autoload; pctl newpgrp; wm/sh}&}}";
-
 tbtop: ref Tk->Toplevel;
 screenr: Rect;
 
 badmodule(p: string)
 {
-	sys->fprint(stderr(), "toolbar: cannot load %s: %r\n", p);
+	sys->fprint(sys->fildes(2), "windowbar: cannot load %s: %r\n", p);
 	raise "fail:bad module";
 }
 
@@ -82,14 +76,13 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	sys->bind("#s", "/chan", sys->MBEFORE);
 
 	arg->init(argv);
-	arg->setusage("toolbar [-s] [-p]");
-	startmenu := 1;
+	arg->setusage("windowbar [-s] [-p]");
 #	ownsnarf := (sys->open("/chan/snarf", Sys->ORDWR) == nil);
 	ownsnarf := sys->stat("/chan/snarf").t0 < 0;
 	while((c := arg->opt()) != 0){
 		case c {
 		's' =>
-			startmenu = 0;
+			;
 		'p' =>
 			ownsnarf = 1;
 		* =>
@@ -100,16 +93,17 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	arg = nil;
 
 	if (ctxt == nil){
-		sys->fprint(sys->fildes(2), "toolbar: must run under a window manager\n");
+		sys->fprint(sys->fildes(2), "windowbar: must run under a window manager\n");
 		raise "fail:no wm";
 	}
 
 	exec := chan of string;
 	task := chan of string;
 
-	tbtop = toolbar(ctxt, startmenu, exec, task);
+	tbtop = windowbar(ctxt, exec, task);
 	tkclient->startinput(tbtop, "ptr" :: "control" :: nil);
 	layout(tbtop);
+	spawn updatebattery(ctxt, tbtop, 1);
 
 	shctxt := Context.new(ctxt);
 	shctxt.addmodule("wm", myselfbuiltin);
@@ -142,15 +136,17 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		wmctl(tbtop, s);
 	s := <-exec =>
 		# guard against parallel access to the shctxt environment
-		if (donesetup){
-			{
- 				shctxt.run(ref Listnode(nil, s) :: nil, 0);
-			} exception {
-			"fail:*" =>	;
+		if (s != "batterystatus") {
+			if (donesetup){
+				{
+ 					shctxt.run(ref Listnode(nil, s) :: nil, 0);
+				} exception {
+				"fail:*" =>	;
+				}
 			}
 		}
 		if (s == "batterystatus")
-			updatebattery(ctxt, tbtop);
+			updatebattery(ctxt, tbtop, 0);
 	detask := <-task =>
 		deiconify(detask);
 	(off, data, nil, wc) := <-snarfIO.write =>
@@ -200,7 +196,7 @@ wmctl(top: ref Tk->Toplevel, c: string)
 		args = tl args;
 		err := handlerequest(clientid, args);
 		if(err != nil)
-			sys->fprint(sys->fildes(2), "toolbar: bad wmctl request %#q: %s\n", c, err);
+			sys->fprint(sys->fildes(2), "windowbar: bad wmctl request %#q: %s\n", c, err);
 	"newclient" =>
 		# newclient id
 		;
@@ -236,16 +232,16 @@ handlerequest(clientid: string, args: list of string): string
 iconify(id, label: string)
 {
 	label = condenselabel(label);
-	e := tk->cmd(tbtop, "button .toolbar." +id+" -command {send task "+id+"} -takefocus 0");
-	cmd(tbtop, ".toolbar." +id+" configure -text '" + label);
+	e := tk->cmd(tbtop, "button .windowbar." +id+" -command {send task "+id+"} -takefocus 0");
+	cmd(tbtop, ".windowbar." +id+" configure -text '" + label);
 	if(e[0] != '!')
-		cmd(tbtop, "pack .toolbar."+id+" -side left -fill y");
+		cmd(tbtop, "pack .windowbar."+id+" -side left -fill y");
 	cmd(tbtop, "update");
 }
 
 deiconify(id: string)
 {
-	e := tk->cmd(tbtop, "destroy .toolbar."+id);
+	e := tk->cmd(tbtop, "destroy .windowbar."+id);
 	if(e == nil){
 		tkclient->wmctl(tbtop, sys->sprint("ctl %q untask", id));
 		tkclient->wmctl(tbtop, sys->sprint("ctl %q kbdfocus 1", id));
@@ -267,8 +263,7 @@ layout(top: ref Tk->Toplevel)
 	tkclient->onscreen(tbtop, "exact");
 }
 
-toolbar(ctxt: ref Draw->Context, startmenu: int,
-		exec, task: chan of string): ref Tk->Toplevel
+windowbar(ctxt: ref Draw->Context, exec, task: chan of string): ref Tk->Toplevel
 {
 	(tbtop, nil) = tkclient->toplevel(ctxt, nil, nil, Tkclient->Plain);
 	screenr = tbtop.screenr;
@@ -278,29 +273,27 @@ toolbar(ctxt: ref Draw->Context, startmenu: int,
 
 	tk->namechan(tbtop, exec, "exec");
 	tk->namechan(tbtop, task, "task");
-	cmd(tbtop, "frame .toolbar");
-	if (startmenu) {
-		sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/battery/capacity > /batterylevel.txt"));
-		batterylevel : ref Sys->FD;
+	cmd(tbtop, "frame .windowbar");
+	sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/battery/capacity > /batterylevel.txt"));
+	batterylevel : ref Sys->FD;
+	batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
+	battery := array[64] of byte;
+	length := sys->read(batterylevel, battery, len battery);
+	if (length == 0) {
+		sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/max17042-0/capacity > /batterylevel.txt"));
 		batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
-		battery := array[64] of byte;
-		length := sys->read(batterylevel, battery, len battery);
-		if (length == 0) {
-			sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/max17042-0/capacity > /batterylevel.txt"));
-			batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
-			length = sys->read(batterylevel, battery, len battery);
-		}
-		battery = battery[:(length - 1)];
-		sys->fprint(sys->fildes(2), "1\n");
-		level := string battery;
-		cmd(tbtop, "button .toolbar.battery -text " + string level + "% -borderwidth 0 -width 64 -height 64 -command {send exec batterystatus}");
-		cmd(tbtop, "pack .toolbar.battery -side left");
+		length = sys->read(batterylevel, battery, len battery);
 	}
-	cmd(tbtop, "pack .toolbar -fill x");
+	battery = battery[:(length - 1)];
+	sys->fprint(sys->fildes(2), "1\n");
+	level := string battery;
+	cmd(tbtop, "button .windowbar.battery -text " + string level + "% -borderwidth 0 -width 64 -height 64 -command {send exec batterystatus}");
+	cmd(tbtop, "pack .windowbar.battery -side left");
+	cmd(tbtop, "pack .windowbar -fill x");
 	return tbtop;
 }
 
-updatebattery(ctxt: ref Draw->Context, tbtop: ref Tk->Toplevel)
+updatebattery(ctxt: ref Draw->Context, tbtop: ref Tk->Toplevel, wait: int)
 {
 	sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/battery/capacity > /batterylevel.txt"));
 	batterylevel : ref Sys->FD;
@@ -314,17 +307,19 @@ updatebattery(ctxt: ref Draw->Context, tbtop: ref Tk->Toplevel)
 	}
 	battery = battery[:(length - 1)];
 	level := string battery;
-	cmd(tbtop, ".toolbar.battery configure -text " + string level + "%");
+	cmd(tbtop, ".windowbar.battery configure -text " + string level + "%");
 	cmd(tbtop, "update");
+	if (wait == 1) {
+		sys = load Sys Sys->PATH;
+		sys->sleep(60000);
+		updatebattery(ctxt, tbtop, 1);
+	}
 }
 
 setup(shctxt: ref Context, finished: chan of int)
 {
 	ctxt := shctxt.copy(0);
 	ctxt.run(shell->stringlist2list("run"::"/lib/wmsetup"::nil), 0);
-	# if no items in menu, then create some.
-	if (tk->cmd(tbtop, ".m type 0")[0] == '!')
-		ctxt.run(shell->stringlist2list(defaultscript::nil), 0);
 	cmd(tbtop, "update");
 	finished <-= 1;
 }
@@ -355,8 +350,6 @@ initbuiltin(ctxt: ref Context, nil: Sh): string
 		sys->fprint(sys->fildes(2), "wm: cannot load wm as a builtin\n");
 		raise "fail:usage";
 	}
-	ctxt.addbuiltin("menu", myselfbuiltin);
-	ctxt.addbuiltin("delmenu", myselfbuiltin);
 	ctxt.addbuiltin("error", myselfbuiltin);
 	return nil;
 }
@@ -369,10 +362,6 @@ whatis(nil: ref Sh->Context, nil: Sh, nil: string, nil: int): string
 runbuiltin(c: ref Context, sh: Sh,
 			cmd: list of ref Listnode, nil: int): string
 {
-	case (hd cmd).word {
-	"menu" =>	return builtin_menu(c, sh, cmd);
-	"delmenu" =>	return builtin_delmenu(c, sh, cmd);
-	}
 	return nil;
 }
 
@@ -380,75 +369,6 @@ runsbuiltin(nil: ref Context, nil: Sh,
 			nil: list of ref Listnode): list of ref Listnode
 {
 	return nil;
-}
-
-stderr(): ref Sys->FD
-{
-	return sys->fildes(2);
-}
-
-word(ln: ref Listnode): string
-{
-	if (ln.word != nil)
-		return ln.word;
-	if (ln.cmd != nil)
-		return shell->cmd2string(ln.cmd);
-	return nil;
-}
-
-menupath(title: string): string
-{
-	mpath := ".m."+title;
-	for(j := 0; j < len mpath; j++)
-		if(mpath[j] == ' ')
-			mpath[j] = '_';
-	return mpath;
-}
-
-builtin_menu(nil: ref Context, nil: Sh, argv: list of ref Listnode): string
-{
-	n := len argv;
-	if (n < 3 || n > 4) {
-		sys->fprint(stderr(), "usage: menu topmenu [ secondmenu ] command\n");
-		raise "fail:usage";
-	}
-	primary := (hd tl argv).word;
-	argv = tl tl argv;
-
-	if (n == 3) {
-		w := word(hd argv);
-	} else {
-		secondary := (hd argv).word;
-		argv = tl argv;
-
-		mpath := menupath(primary);
-		e := tk->cmd(tbtop, mpath+" cget -width");
-		if(e[0] == '!') {
-			cmd(tbtop, "menu "+mpath);
-		}
-		w := word(hd argv);
-		if (len w == 0)
-			cmd(tbtop, mpath + " insert 0 separator");
-		else
-			cmd(tbtop, mpath+" insert 0 command -label "+tk->quote(secondary)+
-				" -command {send exec "+w+"}");
-	}
-	return nil;
-}
-
-builtin_delmenu(nil: ref Context, nil: Sh, nil: list of ref Listnode): string
-{
-	delmenu(".m");
-	cmd(tbtop, "menu .m");
-	return nil;
-}
-
-delmenu(m: string)
-{
-	for (i := int cmd(tbtop, m + " index end"); i >= 0; i--)
-		if (cmd(tbtop, m + " type " + string i) == "cascade")
-			delmenu(cmd(tbtop, m + " entrycget " + string i + " -menu"));
-	cmd(tbtop, "destroy " + m);
 }
 
 getself(): Shellbuiltin
@@ -460,7 +380,7 @@ cmd(top: ref Tk->Toplevel, c: string): string
 {
 	s := tk->cmd(top, c);
 	if (s != nil && s[0] == '!')
-		sys->fprint(stderr(), "tk error on %#q: %s\n", c, s);
+		sys->fprint(sys->fildes(2), "tk error on %#q: %s\n", c, s);
 	return s;
 }
 
@@ -479,116 +399,7 @@ fatal(s: string)
 	raise "fail:error";
 }
 
-bufferproc(in, out: chan of string)
-{
-	h, t: list of string;
-	dummyout := chan of string;
-	for(;;){
-		outc := dummyout;
-		s: string;
-		if(h != nil || t != nil){
-			outc = out;
-			if(h == nil)
-				for(; t != nil; t = tl t)
-					h = hd t :: h;
-			s = hd h;
-		}
-		alt{
-		x := <-in =>
-			t = x :: t;
-		outc <-= s =>
-			h = tl h;
-		}
-	}
-}
-
-con_cfg := array[] of
-{
-	"frame .cons",
-	"scrollbar .cons.scroll -command {.cons.t yview}",
-	"text .cons.t -width 60w -height 15w -bg white "+
-		"-fg black -font /fonts/misc/latin1.6x13.font "+
-		"-yscrollcommand {.cons.scroll set}",
-	"pack .cons.scroll -side left -fill y",
-	"pack .cons.t -fill both -expand 1",
-	"pack .cons -expand 1 -fill both",
-	"pack propagate . 0",
-	"update"
-};
-nlines := 0;		# transcript length
-
 consoleproc(ctxt: ref Draw->Context, sync: chan of string)
 {
-#	iostdout := sys->file2chan("/chan", "wmstdout");
-#	if(iostdout == nil){
-#		sync <-= sys->sprint("cannot make /chan/wmstdout: %r");
-#		return;
-#	}
-#	iostderr := sys->file2chan("/chan", "wmstderr");
-#	if(iostderr == nil){
-#		sync <-= sys->sprint("cannot make /chan/wmstdout: %r");
-#		return;
-#	}
-
 	sync <-= nil;
-
-#	(top, titlectl) := tkclient->toplevel(ctxt, "", "Log", tkclient->Appl); 
-#	for(i := 0; i < len con_cfg; i++)
-#		cmd(top, con_cfg[i]);
-
-#	r := tk->rect(top, ".", Tk->Border|Tk->Required);
-#	cmd(top, ". configure -x " + string ((top.screenr.dx() - r.dx()) / 2 + top.screenr.min.x) +
-#				" -y " + string (r.dy() / 3 + top.screenr.min.y));
-
-#	tkclient->startinput(top, "ptr"::"kbd"::nil);
-#	tkclient->onscreen(top, "onscreen");
-#	tkclient->wmctl(top, "task");
-
-#	for(;;) alt {
-#	c := <-titlectl or
-#	c = <-top.wreq or
-#	c = <-top.ctxt.ctl =>
-#		if(c == "exit")
-#			c = "task";
-#		tkclient->wmctl(top, c);
-#	c := <-top.ctxt.kbd =>
-#		tk->keyboard(top, c);
-#	p := <-top.ctxt.ptr =>
-#		tk->pointer(top, *p);
-#	(nil, nil, nil, rc) := <-iostdout.read =>
-#		if(rc != nil)
-#			rc <-= (nil, "inappropriate use of file");
-#	(nil, nil, nil, rc) := <-iostderr.read =>
-#		if(rc != nil)
-#			rc <-= (nil, "inappropriate use of file");
-#	(nil, data, nil, wc) := <-iostdout.write =>
-#		conout(top, data, wc);
-#	(nil, data, nil, wc) := <-iostderr.write =>
-#		conout(top, data, wc);
-#		if(wc != nil)
-#			tkclient->wmctl(top, "untask");
-#	}
-}
-
-conout(top: ref Tk->Toplevel, data: array of byte, wc: Sys->Rwrite)
-{
-	if(wc == nil)
-		return;
-
-	s := string data;
-	tk->cmd(top, ".cons.t insert end '"+ s);
-	alt{
-	wc <-= (len data, nil) =>;
-	* =>;
-	}
-
-	for(i := 0; i < len s; i++)
-		if(s[i] == '\n')
-			nlines++;
-	if(nlines > MAXCONSOLELINES){
-		cmd(top, ".cons.t delete 1.0 " + string (nlines/4) + ".0; update");
-		nlines -= nlines / 4;
-	}
-
-	tk->cmd(top, ".cons.t see end; update");
 }

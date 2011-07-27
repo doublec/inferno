@@ -97,39 +97,33 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	sync := chan of string;
 	sync_wb := chan of string;
 	sync_bsrv := chan of string;
-	argv = tl argv;
+	sync_kbd := chan of string;
 	argv = "wm/windowbar" :: nil;
 	spawn command(clientctxt, argv, sync_wb);
 	if((e := <- sync_wb) != nil)
 		fatal("cannot run command " + hd argv + ": " + e);
-	argv = "wm/toolbar" :: nil;
-	spawn command(clientctxt, argv, sync);
-	if((e = <- sync) != nil)
-		fatal("cannot run command " + hd argv + ": " + e);
-	# FIXME: this is the wrong place to put this
-	# need to look for a place where buttonserver will be run on startup
-	argv = "buttonserver" :: nil;
-	spawn command(clientctxt, argv, sync_bsrv);
-	if((e = <- sync_bsrv) != nil)
-		fatal("cannot run command " + hd argv + ": " + e);
+	ready : int;
+	done := 0;
+	spawn organizer(clientctxt, ready, done);
 
 	fakekbd = chan of string;
 
 	minimize_win := chan of string;
+	toggle_kbd := chan of string;
 	
-	spawn monitor_button(minimize_win);
+	spawn monitor_button(minimize_win, toggle_kbd);
 
 	for(;;) alt {
 	s := <- minimize_win =>
 		if(kbdfocus != nil) {
-			if(kbdfocus.id == 1) {
+			if(kbdfocus.id == 1 || kbdfocus.id == 0) {
 				break;
 			}
 			kbdfocus.ctl <-= "task";
 			old := kbdfocus;
 			kbdfocus = nil;
 			for(z := wmsrv->top(); z != nil; z = z.znext) {
-				if(z != old && z.id != 0) {
+				if(z != old && z.id != 0 && z.id != 1) {
 					kbdfocus = z;
 					break;
 				}
@@ -147,7 +141,8 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		# they're unceremoniously dumped.
 		if(c == "exit")
 			for(z := wmsrv->top(); z != nil; z = z.znext)
-				z.ctl <-= "exit";
+				if (z.id != 0 && z.id != 1)
+					z.ctl <-= "exit";
 
 		wmclient->win.wmctl(c);
 		if(win.image != screen.image)
@@ -305,6 +300,16 @@ handlerequest(win: ref Wmclient->Window, wmctxt: ref Wmcontext, c: ref Client, r
 		r.min.y = int hd args; args = tl args;
 		r.max.x = int hd args; args = tl args;
 		r.max.y = int hd args; args = tl args;
+		if (c != nil) {
+			if (c.id != 0 && c.id != 1 && c.id != 3) {
+				r.min.x = 0;
+				r.min.y = 0;
+				r.max.x = screen.image.r.dx();
+				r.max.y = screen.image.r.dy();
+				kbdfocus = c;
+				kbdfocus.ctl <-= "haskbdfocus 1";
+			}
+		}
 		if(args != nil){
 			case hd args{
 			"onscreen" =>
@@ -346,14 +351,19 @@ handlerequest(win: ref Wmclient->Window, wmctxt: ref Wmcontext, c: ref Client, r
 		if(w == nil)
 			return "no such tag";
 		if(ismove){
-			if(n != 5)
-				return "bad arg count";
-			return dragwin(wmctxt.ptr, c, w, Point(int hd args, int hd tl args).sub(w.r.min));
+			if(c.id == 3) {
+				if(n != 5)
+					return "bad arg count";
+				return dragwin(wmctxt.ptr, c, w, Point(int hd args, int hd tl args).sub(w.r.min));
+			}
 		}else{
-			if(n != 5)
-				return "bad arg count";
-			sizewin(wmctxt.ptr, c, w, Point(int hd args, int hd tl args));
+			if(c.id == 3) {
+				if(n != 5)
+					return "bad arg count";
+#				sizewin(wmctxt.ptr, c, w, Point(int hd args, int hd tl args));
+			}
 		}
+		return "request denied";
 	"fixedorigin" =>
 		c.flags |= Fixedorigin;
 	"rect" =>
@@ -466,39 +476,39 @@ dragwin(ptr: chan of ref Pointer, c: ref Client, w: ref Window, off: Point): str
 	return nil;
 }
 
-sizewin(ptrc: chan of ref Pointer, c: ref Client, w: ref Window, minsize: Point): string
-{
-	borders := array[4] of ref Image;
-	showborders(borders, w.r, Minx|Maxx|Miny|Maxy);
-	screen.image.flush(Draw->Flushnow);
-	while((ptr := <-ptrc).buttons == 0)
-		;
-	xy := ptr.xy;
-	move, show: int;
-	offset := Point(0, 0);
-	r := w.r;
-	show = Minx|Miny|Maxx|Maxy;
-	if(xy.in(w.r) == 0){
-		r = (xy, xy);
-		move = Maxx|Maxy;
-	}else {
-		if(xy.x < (r.min.x+r.max.x)/2){
-			move=Minx;
-			offset.x = xy.x - r.min.x;
-		}else{
-			move=Maxx;
-			offset.x = xy.x - r.max.x;
-		}
-		if(xy.y < (r.min.y+r.max.y)/2){
-			move |= Miny;
-			offset.y = xy.y - r.min.y;
-		}else{
-			move |= Maxy;
-			offset.y = xy.y - r.max.y;
-		}
-	}
-	return reshape(c, w.tag, sweep(ptrc, r, offset, borders, move, show, minsize));
-}
+#sizewin(ptrc: chan of ref Pointer, c: ref Client, w: ref Window, minsize: Point): string
+#{
+#	borders := array[4] of ref Image;
+#	showborders(borders, w.r, Minx|Maxx|Miny|Maxy);
+#	screen.image.flush(Draw->Flushnow);
+#	while((ptr := <-ptrc).buttons == 0)
+#		;
+#	xy := ptr.xy;
+#	move, show: int;
+#	offset := Point(0, 0);
+#	r := w.r;
+#	show = Minx|Miny|Maxx|Maxy;
+#	if(xy.in(w.r) == 0){
+#		r = (xy, xy);
+#		move = Maxx|Maxy;
+#	}else {
+#		if(xy.x < (r.min.x+r.max.x)/2){
+#			move=Minx;
+#			offset.x = xy.x - r.min.x;
+#		}else{
+#			move=Maxx;
+#			offset.x = xy.x - r.max.x;
+#		}
+#		if(xy.y < (r.min.y+r.max.y)/2){
+#			move |= Miny;
+#			offset.y = xy.y - r.min.y;
+#		}else{
+#			move |= Maxy;
+#			offset.y = xy.y - r.max.y;
+#		}
+#	}
+#	return reshape(c, w.tag, sweep(ptrc, r, offset, borders, move, show, minsize));
+#}
 
 reshape(c: ref Client, tag: string, r: Rect): string
 {
@@ -529,7 +539,7 @@ sweep(ptr: chan of ref Pointer, r: Rect, offset: Point, borders: array of ref Im
 			r.max.x = xy.x;
 		if(move&Maxy)
 			r.max.y = xy.y;
-		showborders(borders, r, show);
+#		showborders(borders, r, show);
 	}
 	r = r.canon();
 	if(r.min.y < screen.image.r.min.y){
@@ -556,29 +566,29 @@ sweep(ptr: chan of ref Pointer, r: Rect, offset: Point, borders: array of ref Im
 	return r;
 }
 
-showborders(b: array of ref Image, r: Rect, show: int)
-{
-	r = r.canon();
-	b[Sminx] = showborder(b[Sminx], show&Minx,
-		(r.min, (r.min.x+Bdwidth, r.max.y)));
-	b[Sminy] = showborder(b[Sminy], show&Miny,
-		((r.min.x+Bdwidth, r.min.y), (r.max.x-Bdwidth, r.min.y+Bdwidth)));
-	b[Smaxx] = showborder(b[Smaxx], show&Maxx,
-		((r.max.x-Bdwidth, r.min.y), (r.max.x, r.max.y)));
-	b[Smaxy] = showborder(b[Smaxy], show&Maxy,
-		((r.min.x+Bdwidth, r.max.y-Bdwidth), (r.max.x-Bdwidth, r.max.y)));
-}
+#showborders(b: array of ref Image, r: Rect, show: int)
+#{
+#	r = r.canon();
+#	b[Sminx] = showborder(b[Sminx], show&Minx,
+#		(r.min, (r.min.x+Bdwidth, r.max.y)));
+#	b[Sminy] = showborder(b[Sminy], show&Miny,
+#		((r.min.x+Bdwidth, r.min.y), (r.max.x-Bdwidth, r.min.y+Bdwidth)));
+#	b[Smaxx] = showborder(b[Smaxx], show&Maxx,
+#		((r.max.x-Bdwidth, r.min.y), (r.max.x, r.max.y)));
+#	b[Smaxy] = showborder(b[Smaxy], show&Maxy,
+#		((r.min.x+Bdwidth, r.max.y-Bdwidth), (r.max.x-Bdwidth, r.max.y)));
+#}
 
-showborder(b: ref Image, show: int, r: Rect): ref Image
-{
-	if(!show)
-		return nil;
-	if(b != nil && b.r.size().eq(r.size()))
-		b.origin(r.min, r.min);
-	else
-		b = screen.newwindow(r, Draw->Refbackup, Draw->Red);
-	return b;
-}
+#showborder(b: ref Image, show: int, r: Rect): ref Image
+#{
+#	if(!show)
+#		return nil;
+#	if(b != nil && b.r.size().eq(r.size()))
+#		b.origin(r.min, r.min);
+#	else
+#		b = screen.newwindow(r, Draw->Refbackup, Draw->Red);
+#	return b;
+#}
 
 r2s(r: Rect): string
 {
@@ -726,30 +736,91 @@ command(ctxt: ref Draw->Context, args: list of string, sync: chan of string)
 	c->init(ctxt, args);
 }
 
-monitor_button(ch : chan of string)
+organizer(clientctxt : ref Draw->Context, ready : int, done : int)
+{
+	ready = 0;
+	for(z := wmsrv->top(); z != nil; z = z.znext) {
+		ready = ready + 1;
+	}
+	argv : list of string;
+	if (done != ready) {
+		if (ready == 1) {
+			sync := chan of string;
+			argv = "wm/toolbar" :: nil;
+			spawn command(clientctxt, argv, sync);
+			if((e := <- sync) != nil)
+				fatal("cannot run command " + hd argv + ": " + e);
+		}
+		if (ready == 3) {
+			sync_kbd := chan of string;
+			argv = "wm/keyboard" :: "-e" :: nil;
+			spawn command(clientctxt, argv, sync_kbd);
+			if((e := <- sync_kbd) != nil)
+				fatal("cannot run command " + hd argv + ": " + e);
+		}
+		# FIXME: this is the wrong place to put this
+		# need to look for a place where buttonserver will be run on startup
+		if (ready == 4) {
+			sync_bsrv := chan of string;
+			argv = "buttonserver" :: nil;
+			spawn command(clientctxt, argv, sync_bsrv);
+			if((e := <- sync_bsrv) != nil)
+				fatal("cannot run command " + hd argv + ": " + e);
+			return;
+		}
+	}
+	done = ready;
+	spawn organizer(clientctxt, ready, done);
+}
+
+monitor_button(ch : chan of string, toggle_kbd : chan of string)
 {
 	fd : ref Sys->FD;
 	while(sys->sleep(1) == 0) { # hack to wait till buttonserver is ready
 		fd = sys->open("/dev/buttons", sys->OREAD);
-#		if(fd == nil) {
-#			sys->print("could not open /dev/buttons: %r\n");
-#			return;
-#		}
 		if(fd != nil) {
 			break;
 		}
 	}
+
+	kbdcontact : ref Client;
+
+	wait := 0;
+	enough := 0;
+	while(wait != 1) {
+		for(z := wmsrv->top(); z != nil; z = z.znext) {
+			if(z.id == 3 && wait != 2) {
+				kbdcontact = z;
+				kbdfocus = kbdcontact;
+				ch <-= "minimize";
+				wait = wait + 2;
+				break;
+			}
+			if(z.id == 2 && wait != -1) {
+				kbdfocus = z;
+				ch <-= "minimize";
+				wait = wait - 1;
+				break;
+			}
+		}
+		enough = enough + 1;
+		if (enough >= 20) wait = 1;
+	}
+
 	while(1) {
-		newstr : string;
 		buf := array[64] of byte;
 		n := sys->read(fd, buf, len buf);
 		if(n == 0) {
 			return;
 		}
 		buf = buf[:n];
-		str := string buf;
-		if(strstr(str, "home press") != -1) {
+		output := string buf;
+		if(strstr(output, "home press") != -1) {
 			ch <-= "minimize";
+		}
+		if(strstr(output, "menu press") != -1) {
+			kbdcontact.ctl <-= "untask";
+			kbdcontact.ctl <-= "raise";
 		}
 	}
 }

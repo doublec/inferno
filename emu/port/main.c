@@ -134,6 +134,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 		type = cp[0];
 		tkfont = "/fonts/pelm/ascii.12.font";
 		if (type == 's') {
+			system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
 			eventfiles = malloc(7*sizeof(char *));
 			eventfiles[0] = "/dev/input/event0";
 			eventfiles[1] = "/dev/input/event1";
@@ -181,6 +182,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 			maineventnum = 0;
 		}
 		else {
+			system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
 			eventfiles = malloc(7*sizeof(char *));
 			eventfiles[0] = "/dev/input/event0";
 			eventfiles[1] = "/dev/input/event1";

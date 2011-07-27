@@ -31,12 +31,6 @@ Toolbar: module
 
 MAXCONSOLELINES:	con 1024;
 
-# execute this if no menu items have been created
-# by the init script.
-defaultscript :=
-	"{menu shell " +
-		"{{autoload=std; load $autoload; pctl newpgrp; wm/sh}&}}";
-
 tbtop: ref Tk->Toplevel;
 screenr: Rect;
 channel: ref Tk->Toplevel;
@@ -52,7 +46,6 @@ menu := array[] of {
 	"Charon", "charon",
 	"Manual", "wm/man",
 	"Shell", "wm/sh",
-	"Keyboard", "wm/keyboard",
 	"Acme", "acme",
 	"Calendar", "wm/calendar",
 	"->System", "folder:1",
@@ -67,7 +60,8 @@ menu := array[] of {
 	}, array[] of { # folder2
 	"Clock", "wm/date",
 	"Colors", "wm/colors",
-	"Coffee", "wm/coffee"
+	"Coffee", "wm/coffee",
+	"Polyhedra", "wm/polyhedra"
 	}, array[] of { # folder 3
 	"Tetris", "wm/tetris",
 	"Bounce", "wm/bounce"
@@ -76,7 +70,7 @@ menu := array[] of {
 
 badmodule(p: string)
 {
-	sys->fprint(stderr(), "toolbar: cannot load %s: %r\n", p);
+	sys->fprint(sys->fildes(2), "toolbar: cannot load %s: %r\n", p);
 	raise "fail:bad module";
 }
 
@@ -117,13 +111,12 @@ init(ctxt: ref Draw->Context, argv: list of string)
 
 	arg->init(argv);
 	arg->setusage("toolbar [-s] [-p]");
-	startmenu := 1;
 #	ownsnarf := (sys->open("/chan/snarf", Sys->ORDWR) == nil);
 	ownsnarf := sys->stat("/chan/snarf").t0 < 0;
 	while((c := arg->opt()) != 0){
 		case c {
 		's' =>
-			startmenu = 0;
+			;
 		'p' =>
 			ownsnarf = 1;
 		* =>
@@ -141,9 +134,9 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	exec := chan of string;
 	launchchannel := chan of string;
 
-	tbtop = toolbar(ctxt, startmenu, exec, nil);
+	tbtop = toolbar(ctxt, exec, nil);
 	tkclient->startinput(tbtop, "ptr" :: "control" :: nil);
-	layout(tbtop);
+	tkclient->onscreen(tbtop, "exact");
 	
 	shctxt := Context.new(ctxt);
 	shctxt.addmodule("wm", myselfbuiltin);
@@ -178,12 +171,14 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		wmctl(tbtop, s);
 	s := <-exec =>
 		# guard against parallel access to the shctxt environment
-		sys->fprint(sys->fildes(2), "s = %s", s);
-		if (donesetup){
-			{
- 				shctxt.run(ref Listnode(nil, s) :: nil, 0);
-			} exception {
-			"fail:*" =>	;
+		if (s != "launcher") {
+			sys->fprint(sys->fildes(2), "s = %s\n", s);
+			if (donesetup){
+				{
+ 					shctxt.run(ref Listnode(nil, s) :: nil, 0);
+				} exception {
+				"fail:*" =>	;
+				}
 			}
 		}
 		if (s == "launcher") {
@@ -238,20 +233,13 @@ wmctl(top: ref Tk->Toplevel, c: string)
 		;
 	"rect" =>
 		tkclient->wmctl(top, c);
-		layout(top);
+		tkclient->onscreen(tbtop, "exact");
 	* =>
 		tkclient->wmctl(top, c);
 	}
 }
 
-layout(top: ref Tk->Toplevel)
-{
-	cmd(top, "update");
-	tkclient->onscreen(tbtop, "exact");
-}
-
-toolbar(ctxt: ref Draw->Context, startmenu: int,
-		exec, task: chan of string): ref Tk->Toplevel
+toolbar(ctxt: ref Draw->Context, exec, task: chan of string): ref Tk->Toplevel
 {
 	(tbtop, nil) = tkclient->toplevel(ctxt, nil, nil, Tkclient->Plain);
 	screenr = tbtop.screenr;
@@ -259,11 +247,8 @@ toolbar(ctxt: ref Draw->Context, startmenu: int,
 	tk->namechan(tbtop, exec, "exec");
 
 	cmd(tbtop, "frame .toolbar");
-	if (startmenu) {
-		# button setup
-		cmd(tbtop, "button .toolbar.start -borderwidth 0 -bitmap vitasmall.bit -width " + string screenr.dx() + " -height 64 -command {send exec launcher}");
-		cmd(tbtop, "pack .toolbar.start -side left -in .toolbar");
-	}
+	cmd(tbtop, "button .toolbar.start -borderwidth 0 -bitmap vitasmall.bit -width " + string screenr.dx() + " -height 64 -command {send exec launcher}");
+	cmd(tbtop, "pack .toolbar.start -side left -in .toolbar");
 	cmd(tbtop, "pack .toolbar -fill x -in .");
 
 	return tbtop;
@@ -323,9 +308,6 @@ setup(shctxt: ref Context, finished: chan of int)
 {
 	ctxt := shctxt.copy(0);
 	ctxt.run(shell->stringlist2list("run"::"/lib/wmsetup"::nil), 0);
-	# if no items in menu, then create some.
-	if (tk->cmd(tbtop, ".m type 0")[0] == '!')
-		ctxt.run(shell->stringlist2list(defaultscript::nil), 0);
 	cmd(tbtop, "update");
 	finished <-= 1;
 }
@@ -356,8 +338,6 @@ initbuiltin(ctxt: ref Context, nil: Sh): string
 		sys->fprint(sys->fildes(2), "wm: cannot load wm as a builtin\n");
 		raise "fail:usage";
 	}
-	ctxt.addbuiltin("menu", myselfbuiltin);
-	ctxt.addbuiltin("delmenu", myselfbuiltin);
 	ctxt.addbuiltin("error", myselfbuiltin);
 	return nil;
 }
@@ -379,21 +359,6 @@ runsbuiltin(nil: ref Context, nil: Sh,
 	return nil;
 }
 
-stderr(): ref Sys->FD
-{
-	return sys->fildes(2);
-}
-
-word(ln: ref Listnode): string
-{
-	if (ln.word != nil)
-		return ln.word;
-	if (ln.cmd != nil)
-		return shell->cmd2string(ln.cmd);
-	return nil;
-}
-
-
 getself(): Shellbuiltin
 {
 	return myselfbuiltin;
@@ -403,7 +368,7 @@ cmd(top: ref Tk->Toplevel, c: string): string
 {
 	s := tk->cmd(top, c);
 	if (s != nil && s[0] == '!')
-		sys->fprint(stderr(), "tk error on %#q: %s\n", c, s);
+		sys->fprint(sys->fildes(2), "tk error on %#q: %s\n", c, s);
 	return s;
 }
 
@@ -420,29 +385,6 @@ fatal(s: string)
 	sys->fprint(sys->fildes(2), "wm: %s\n", s);
 	kill(sys->pctl(0, nil), "killgrp");
 	raise "fail:error";
-}
-
-bufferproc(in, out: chan of string)
-{
-	h, t: list of string;
-	dummyout := chan of string;
-	for(;;){
-		outc := dummyout;
-		s: string;
-		if(h != nil || t != nil){
-			outc = out;
-			if(h == nil)
-				for(; t != nil; t = tl t)
-					h = hd t :: h;
-			s = hd h;
-		}
-		alt{
-		x := <-in =>
-			t = x :: t;
-		outc <-= s =>
-			h = tl h;
-		}
-	}
 }
 
 con_cfg := array[] of
@@ -484,7 +426,7 @@ consoleproc(ctxt: ref Draw->Context, sync: chan of string)
 				" -y " + string (r.dy() / 3 + top.screenr.min.y));
 
 	tkclient->startinput(top, "ptr"::"kbd"::nil);
-#	tkclient->onscreen(top, "onscreen");
+	tkclient->onscreen(top, "onscreen");
 	tkclient->wmctl(top, "task");
 
 	for(;;) alt {

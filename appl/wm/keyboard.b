@@ -214,7 +214,7 @@ init(ctxt: ref Draw->Context, args: list of string)
 	r := t.screenr;
 	off := (r.dx()-w)/2;
 	cmd(t, sys->sprint(". configure -x %d -y %d", r.min.x+off, r.max.y-h));
-	tkclient->onscreen(t, nil);
+	tkclient->onscreen(t, "onscreen");
 	tkclient->startinput(t, "ptr" :: nil);
 
 	spawn handle_keyclicks(t, wcmd, taskbar);
