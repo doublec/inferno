@@ -40,11 +40,11 @@ static int lastb;
 static int touch = 0;
 
 static int xmin = 2;
-static int xadjust = 3; //shifts mouse left
-static int lowx = 5; //should be xmin + xadjust
+static int xadjust = 7; //shifts mouse left
+static int lowx = 9; //should be xmin + xadjust
 static int ymin = 2;
-static int yadjust = 11; //shifts mouse up
-static int lowy = 13; //should be ymin + yadjust
+static int yadjust = -4; //shifts mouse up //negative value helps with keyboard at the bottom of the screen
+static int lowy = -2; //should be ymin + yadjust
 
 static char mainbuttoninput[19];
 static int on = 1;

@@ -46,7 +46,6 @@ menu := array[] of {
 	"Charon", "charon",
 	"Manual", "wm/man",
 	"Shell", "wm/sh",
-	"Acme", "acme",
 	"Calendar", "wm/calendar",
 	"->System", "folder:1",
 	"->Misc", "folder:2",
