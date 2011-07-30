@@ -142,7 +142,7 @@ init(ctxt: ref Draw->Context, args: list of string)
 		array[len keys[1]] of int,
 	};
 
-	(t, wcmd) := tkclient->toplevel(ctxt, "", "Kbd", winopts);
+	(t, wcmd) := tkclient->toplevel(ctxt, "", "Kbd", 0);
 	cmd(t, ". configure -bd 0 -relief flat");
 
 	(tbtop, nil) = tkclient->toplevel(ctxt, nil, nil, Tkclient->Plain);

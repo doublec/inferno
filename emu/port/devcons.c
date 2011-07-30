@@ -34,12 +34,16 @@ enum
 	Qsysctl,
 	Qsysname,
 	Qtime,
-	Quser
+	Quser,
+	Qbattery,
+	Qtype
 };
 
 Dirtab contab[] =
 {
 	".",	{Qdir, 0, QTDIR},	0,		DMDIR|0555,
+	"type",	{Qtype},	0,      0666,
+	"battery",	{Qbattery},	0,      0666,
 	"events",       {Qevents},      0,      0666,
 	"cons",		{Qcons},	0,	0666,
 	"consctl",	{Qconsctl},	0,	0222,
@@ -69,6 +73,8 @@ Queue*	gkbdq;			/* Graphics keyboard unprocessed input */
 Queue*	kbdq;			/* Console window unprocessed keyboard input */
 Queue*	lineq;			/* processed console input */
 Queue*  eventq;                 /* Events imported from Linux host devices */
+Queue*	batteryq;		/* Battery level */
+Queue*	typeq;			/* Device type */
 
 int     eventfds[MAX_EVENTFDS];
 
@@ -181,6 +187,12 @@ consinit(void)
 		panic("no memory");
 	eventq = qopen(512, 0, nil, nil);
 	if(eventq == 0)
+		panic("no memory");
+	batteryq = qopen(512, 0, nil, nil);
+	if(batteryq == 0)
+		panic("no memory");
+	typeq = qopen(512, 0, nil, nil);
+	if(typeq == 0)
 		panic("no memory");
 	randominit();
 }
@@ -322,6 +334,8 @@ consread(Chan *c, void *va, long n, vlong offset)
 {
 	int send;
 	char *p, buf[64], ch;
+	FILE * battery;
+	int size;
 
 	if(c->qid.type & QTDIR)
 		return devdirread(c, va, n, contab, nelem(contab), devgen);
@@ -445,6 +459,27 @@ consread(Chan *c, void *va, long n, vlong offset)
 		poperror();
 		runlock(&kprintq.l);
 		return n;
+	case Qbattery:
+		if(type == 's')
+			battery = fopen("/sys/class/power_supply/battery/capacity", "r");
+		else if(type == 'c')
+			battery = fopen("/sys/class/power_supply/max17042-0/capacity", "r");
+		else
+			battery = fopen("/sys/class/power_supply/battery/capacity", "r");
+		size = fread(buf, 1, sizeof(buf), battery);
+		fclose(battery);
+		buf[size - 1] = '\0';
+		return readstr(offset, va, n, buf);
+	case Qtype:
+		if(type == 's')
+			strncpy(buf, "nexus s", sizeof(buf));
+		else if(type == 'c')
+			strncpy(buf, "nook color", sizeof(buf));
+		else if(type == 'e')
+			strncpy(buf, "emulator", sizeof(buf));
+		else
+			strncpy(buf, "nexus s", sizeof(buf));
+		return readstr(offset, va, n, buf);
 	}
 }
 

@@ -36,6 +36,8 @@ fakekbd: chan of string;
 fakekbdin: chan of string;
 buttons := 0;
 resizeoverride := 0;
+kbdcontact : ref Wmsrv->Client;
+kbdheight : int;
 
 badmodule(p: string)
 {
@@ -119,12 +121,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 			kbdfocus.ctl <-= "task";
 			old := kbdfocus;
 			kbdfocus = nil;
-			for(z := wmsrv->top(); z != nil; z = z.znext) {
-				if(z != old && z.id != 0 && z.id != 1) {
-					kbdfocus = z;
-					break;
-				}
-			}
+			focusnext();
 			old.ctl <-= "haskbdfocus 0";
 			if(kbdfocus != nil) {
 				kbdfocus.ctl <-= "haskbdfocus 1";
@@ -136,18 +133,12 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		# XXX could implement "pleaseexit" in order that
 		# applications can raise a warning message before
 		# they're unceremoniously dumped.
-		sys->print("command: %s\n", c);
 		if(c == "exit")
 			for(z := wmsrv->top(); z != nil; z = z.znext) {
 				if (z.id != 0 && z.id != 1) {
 					z.ctl <-= "exit";
 					if(z.id == 3) {
-						for(z := wmsrv->top(); z != nil; z = z.znext) {
-							if (z.id != 0 && z.id != 1 && z.id != 3) {
-								break;
-							}
-						}
-					z.ctl <-= sys->sprint("!reshape . -1 0 0 %d %d", screen.image.r.dx(), screen.image.r.dy());
+						resizewindow(1);
 					}
 				}
 			}
@@ -309,10 +300,21 @@ handlerequest(win: ref Wmclient->Window, wmctxt: ref Wmcontext, c: ref Client, r
 		r.max.y = int hd args; args = tl args;
 		if (c != nil) {
 			if (c.id != 0 && c.id != 1 && c.id != 3 && resizeoverride == 0) {
+#				window : ref Wmsrv->Window;
 				r.min.x = 0;
 				r.min.y = 0;
 				r.max.x = screen.image.r.dx();
 				r.max.y = screen.image.r.dy();
+#				for(z := wmsrv->top(); z != nil; z = z.znext)
+#					if (z.id == 3) {
+#						sys->print("kbd exists\n");
+#						window := z.window(".");
+#						if(window != nil) {
+#							sys->print("kbd present\n");
+#							r.max.y = screen.image.r.dy() - kbdheight;
+#						}
+#						break;
+#					}
 				kbdfocus = c;
 				kbdfocus.ctl <-= "haskbdfocus 1";
 			}
@@ -359,11 +361,11 @@ handlerequest(win: ref Wmclient->Window, wmctxt: ref Wmcontext, c: ref Client, r
 		if(w == nil)
 			return "no such tag";
 		if(ismove){
-			if(c.id == 3) {
-				if(n != 5)
-					return "bad arg count";
-				return dragwin(wmctxt.ptr, c, w, Point(int hd args, int hd tl args).sub(w.r.min));
-			}
+#			if(c.id == 3) {
+#				if(n != 5)
+#					return "bad arg count";
+#				return dragwin(wmctxt.ptr, c, w, Point(int hd args, int hd tl args).sub(w.r.min));
+#			}
 		}else{
 			if(c.id == 3) {
 				if(n != 5)
@@ -408,14 +410,9 @@ handlerequest(win: ref Wmclient->Window, wmctxt: ref Wmcontext, c: ref Client, r
 		c.flags &= ~(Controlstarted | Controller);
 	"task" =>
 		controller.ctl <-= "request " + string c.id + " " + req;
-#		if(c.id == 3) {
-#			for(z := wmsrv->top(); z != nil; z = z.znext) {
-#				if (z.id != 0 && z.id != 1 && z.id != 3) {
-#					break;
-#				}
-#			}
-#		z.ctl <-= sys->sprint("!reshape . -1 0 0 %d %d", screen.image.r.dx(), screen.image.r.dy());
-#		}
+		if(c.id == 3) {
+			resizewindow(1);
+		}
 	* =>
 		if(c == controller || controller == nil || (controller.flags & Controlstarted) == 0)
 			return "unknown control request";
@@ -785,7 +782,6 @@ organizer(clientctxt : ref Draw->Context, ready : int, done : int)
 			spawn command(clientctxt, argv, sync_bsrv);
 			if((e := <- sync_bsrv) != nil)
 				fatal("cannot run command " + hd argv + ": " + e);
-			sys->print("z.id(0) == windowbar\nz.id(1) == toolbar\nz.id(2) == log\nz.id(3) == keyboard\n");
 			return;
 		}
 	}
@@ -795,6 +791,14 @@ organizer(clientctxt : ref Draw->Context, ready : int, done : int)
 
 monitor_button(ch : chan of string, win : ref Wmclient->Window, wmctxt: ref Wmcontext)
 {
+	volup := 0;
+	voldown := 0;
+#	type : ref Sys->FD;
+	typedevice := sys->open("/dev/type", sys->OREAD);
+	whattype := array[11] of byte;
+	length := sys->read(typedevice, whattype, len whattype);
+	whattype = whattype[:length];
+	device := string whattype;
 	fd : ref Sys->FD;
 	while(sys->sleep(1) == 0) { # hack to wait till buttonserver is ready
 		fd = sys->open("/dev/buttons", sys->OREAD);
@@ -804,7 +808,6 @@ monitor_button(ch : chan of string, win : ref Wmclient->Window, wmctxt: ref Wmco
 	}
 
 	kbdcontact : ref Client;
-	kbdheight : int;
 
 	wait := 0;
 	enough := 0;
@@ -839,28 +842,56 @@ monitor_button(ch : chan of string, win : ref Wmclient->Window, wmctxt: ref Wmco
 		buf = buf[:n];
 		output := string buf;
 		if(strstr(output, "home press") != -1) {
-			ch <-= "minimize";
+			if(volup == 1) {
+				window := kbdcontact.window(".");
+				if(window == nil) {
+				kbdcontact.ctl <-= "untask";
+				resizewindow(0);
+				} else {
+					overlap := 1;
+					z := wmsrv->top();
+					if(z.id == 3) overlap = 0;
+					z = z.znext;
+					if(z.id == 3) overlap = 0;
+					if(overlap == 0) {
+					kbdcontact.ctl <-= "exit";
+					resizewindow(1);
+					} else {
+					kbdcontact.ctl <-= "raise";
+					resizewindow(0);
+					}
+				}
+			} else if(voldown == 1) {
+				for(z := wmsrv->top(); z != nil; z = z.znext)
+					if (z.id != 0 && z.id != 1) {
+						z.ctl <-= "exit";
+						if(z.id == 3) {
+							resizewindow(1);
+						}
+						focusnext();
+						break;
+					}
+			} else
+				ch <-= "minimize";
 		}
 		if(strstr(output, "menu press") != -1) {
 			window := kbdcontact.window(".");
 			if(window == nil) {
 			kbdcontact.ctl <-= "untask";
-			for(z := wmsrv->top(); z != nil; z = z.znext) {
-				if (z.id != 0 && z.id != 1 && z.id != 3) {
-					break;
-				}
-			}
-			resizeoverride = 1;
-			z.ctl <-= sys->sprint("!reshape . -1 0 0 %d %d", screen.image.r.dx(), screen.image.r.dy() - kbdheight);
-			kbdfocus = z;
+			resizewindow(0);
 			} else {
+				overlap := 1;
+				z := wmsrv->top();
+				if(z.id == 3) overlap = 0;
+				z = z.znext;
+				if(z.id == 3) overlap = 0;
+				if(overlap == 0) {
 				kbdcontact.ctl <-= "exit";
-				for(z := wmsrv->top(); z != nil; z = z.znext) {
-					if (z.id != 0 && z.id != 1 && z.id != 3) {
-						break;
-					}
+				resizewindow(1);
+				} else {
+				kbdcontact.ctl <-= "raise";
+				resizewindow(0);
 				}
-				z.ctl <-= sys->sprint("!reshape . -1 0 0 %d %d", screen.image.r.dx(), screen.image.r.dy());
 			}
 
 		}
@@ -869,17 +900,69 @@ monitor_button(ch : chan of string, win : ref Wmclient->Window, wmctxt: ref Wmco
 				if (z.id != 0 && z.id != 1) {
 					z.ctl <-= "exit";
 					if(z.id == 3) {
-						for(z := wmsrv->top(); z != nil; z = z.znext) {
-							if (z.id != 0 && z.id != 1 && z.id != 3) {
-								break;
-							}
-						}
-					z.ctl <-= sys->sprint("!reshape . -1 0 0 %d %d", screen.image.r.dx(), screen.image.r.dy());
+						resizewindow(1);
 					}
+					focusnext();
 					break;
 				}
 		}
+		if(device == "nook color") {
+			if(strstr(output, "volume up press") != -1) {
+				volup = 1;
+			}
+			if(strstr(output, "volume down press") != -1) {
+				voldown = 1;
+			}
+			if(strstr(output, "volume up release") != -1) {
+				volup = 0;
+			}
+			if(strstr(output, "volume down release") != -1) {
+				voldown = 0;
+			}
+		}
 	}
+}
+
+focusnext() : ref Wmsrv->Client
+{
+	# looks for open window and raises it
+	for(z := wmsrv->top(); z != nil; z = z.znext) {
+		if (z.id != 0 && z.id != 1) {
+			window := z.window(".");
+			if(window != nil) {
+				z.ctl <-= "raise";
+				break;
+			}
+		}
+	}
+	return z;
+}
+
+resizewindow(method : int) : ref Wmsrv->Client
+{
+	# method 0 == allow room for kbd
+	# method 1 == fullscreen
+	activewindow := 0;
+	for(z := wmsrv->top(); z != nil; z = z.znext) {
+		if (z.id != 0 && z.id != 1 && z.id != 3) {
+			window := z.window(".");
+			if(window != nil) {
+				activewindow = 1;
+				break;
+			}
+		}
+	}
+	if(activewindow == 1) {
+		if(method == 0) {
+			resizeoverride = 1;
+			z.ctl <-= sys->sprint("!reshape . -1 0 0 %d %d", screen.image.r.dx(), screen.image.r.dy() - kbdheight);
+			z.ctl <-= "raise";
+		} else {
+			z.ctl <-= sys->sprint("!reshape . -1 0 0 %d %d", screen.image.r.dx(), screen.image.r.dy());
+		}
+		return z;
+	}
+	return nil;
 }
 
 strstr(s, t : string) : int

@@ -274,18 +274,11 @@ windowbar(ctxt: ref Draw->Context, exec, task: chan of string): ref Tk->Toplevel
 	tk->namechan(tbtop, exec, "exec");
 	tk->namechan(tbtop, task, "task");
 	cmd(tbtop, "frame .windowbar");
-	sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/battery/capacity > /batterylevel.txt"));
 	batterylevel : ref Sys->FD;
-	batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
-	battery := array[64] of byte;
+	batterylevel = sys->open("/dev/battery", sys->OREAD);
+	battery := array[5] of byte;
 	length := sys->read(batterylevel, battery, len battery);
-	if (length == 0) {
-		sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/max17042-0/capacity > /batterylevel.txt"));
-		batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
-		length = sys->read(batterylevel, battery, len battery);
-	}
-	battery = battery[:(length - 1)];
-	sys->fprint(sys->fildes(2), "1\n");
+	battery = battery[:length];
 	level := string battery;
 	cmd(tbtop, "button .windowbar.battery -text " + string level + "% -borderwidth 0 -width 64 -height 64 -command {send exec batterystatus}");
 	cmd(tbtop, "pack .windowbar.battery -side left");
@@ -295,17 +288,11 @@ windowbar(ctxt: ref Draw->Context, exec, task: chan of string): ref Tk->Toplevel
 
 updatebattery(ctxt: ref Draw->Context, tbtop: ref Tk->Toplevel, wait: int)
 {
-	sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/battery/capacity > /batterylevel.txt"));
 	batterylevel : ref Sys->FD;
-	batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
-	battery := array[64] of byte;
+	batterylevel = sys->open("/dev/battery", sys->OREAD);
+	battery := array[5] of byte;
 	length := sys->read(batterylevel, battery, len battery);
-	if (length == 0) {
-		sys->sprint("%s", shell->system(ctxt, "os /system/xbin/cat /sys/class/power_supply/max17042-0/capacity > /batterylevel.txt"));
-		batterylevel = sys->open("/batterylevel.txt", sys->OREAD);
-		length = sys->read(batterylevel, battery, len battery);
-	}
-	battery = battery[:(length - 1)];
+	battery = battery[:length];
 	level := string battery;
 	cmd(tbtop, ".windowbar.battery configure -text " + string level + "%");
 	cmd(tbtop, "update");
