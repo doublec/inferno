@@ -1,0 +1,6 @@
+To make your Nexus S boot into Inferno automatically, follow these steps:
+
+1. Turn on the phone and connect it to your computer
+2. Run Reflash-Nexus-S.sh
+3. When the script completes, press the Volume Down button to select
+   "REBOOT" and press the Power button.
