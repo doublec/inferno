@@ -132,7 +132,17 @@ option(int argc, char *argv[], void (*badusage)(void))
 	case 't':
 		cp = EARGF(badusage());
 		type = cp[0];
+		tkfont = "/fonts/pelm/ascii.12.font";
 		if (type == 's') {
+			system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
+			eventfiles = malloc(7*sizeof(char *));
+			eventfiles[0] = "/dev/input/event0";
+			eventfiles[1] = "/dev/input/event1";
+			eventfiles[2] = "/dev/input/event2";
+			eventfiles[3] = "/dev/input/event3";
+			eventfiles[4] = "/dev/input/event4";
+			eventfiles[5] = "/dev/input/event5";
+			eventfiles[6] = NULL;
 			displaydepth = 32;
 			geom("480x800");
 			mousefile = "/dev/input/event0";
@@ -143,6 +153,13 @@ option(int argc, char *argv[], void (*badusage)(void))
 			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
 		}
 		else if (type == 'c') {
+			system("cp /data/inferno/etc/buttonserver-nook-color.cfg /data/inferno/etc/buttonserver.cfg");
+			eventfiles = malloc(5*sizeof(char *));
+			eventfiles[0] = "/dev/input/event0";
+			eventfiles[1] = "/dev/input/event1";
+			eventfiles[2] = "/dev/input/event2";
+			eventfiles[3] = "/dev/input/event3";
+			eventfiles[4] = NULL;
 			displaydepth = 32;
 			geom("600x1024");
 			rotation_opt = 1;
@@ -154,6 +171,9 @@ option(int argc, char *argv[], void (*badusage)(void))
 			system("echo 255 > /sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness");
 		}
 		else if (type == 'e') {
+			eventfiles = malloc(2*sizeof(char *));
+			eventfiles[0] = "/dev/input/event0";
+			eventfiles[1] = NULL;
 			displaydepth = 16;
 			geom("320x480");
 			mousefile = "/dev/input/event0";
@@ -162,6 +182,15 @@ option(int argc, char *argv[], void (*badusage)(void))
 			maineventnum = 0;
 		}
 		else {
+			system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
+			eventfiles = malloc(7*sizeof(char *));
+			eventfiles[0] = "/dev/input/event0";
+			eventfiles[1] = "/dev/input/event1";
+			eventfiles[2] = "/dev/input/event2";
+			eventfiles[3] = "/dev/input/event3";
+			eventfiles[4] = "/dev/input/event4";
+			eventfiles[5] = "/dev/input/event5";
+			eventfiles[6] = NULL;
 			displaydepth = 32;
 			geom("480x800");
 			mousefile = "/dev/input/event0";
@@ -170,33 +199,6 @@ option(int argc, char *argv[], void (*badusage)(void))
 			maineventnum = 0;
 			system("echo \"on\" > /sys/power/state");
 			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
-		}
-
-		char **neweventfiles;
-		int i;
-		int numevents = 0;
-		if(eventfiles == NULL) {
-			neweventfiles = malloc(2*sizeof(char *));
-			neweventfiles[0] = strdup(homedevice);
-			neweventfiles[1] = NULL;
-		} else {
-			for(i = 0; eventfiles[i] != NULL; i++) {
-				numevents++;
-			}
-			neweventfiles = malloc((numevents + 2) 
-					       * sizeof(char *));
-			for(i = 0; eventfiles[i] != NULL; i++) {
-				neweventfiles[i] = eventfiles[i];
-			}
-			neweventfiles[i] = strdup(homedevice);
-			neweventfiles[i + 1] = NULL;
-		}
-		if(eventfiles != NULL) {
-			free(eventfiles);
-		}
-		eventfiles = neweventfiles;
-		for(i = 0; i < numevents; i++) {
-			printf("numevents = %d %d %s\n", numevents, i, eventfiles[i]);
 		}
 		break;
 	case 'b':		/* jit array bounds checking (obsolete, now on by default) */

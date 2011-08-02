@@ -35,6 +35,7 @@ TARG=\
 	bind.dis\
 	# bit2gif.dis\
 	broke.dis\
+	buttonserver.dis\
 	bytes.dis\
 	cal.dis\
 	calc.dis\
