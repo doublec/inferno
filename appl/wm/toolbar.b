@@ -60,10 +60,13 @@ menu := array[] of {
 	"Clock", "wm/date",
 	"Colors", "wm/colors",
 	"Coffee", "wm/coffee",
-	"Polyhedra", "wm/polyhedra"
+	"Polyhedra", "wm/polyhedra",
+	"Fractals", "wm/mand"
 	}, array[] of { # folder 3
 	"Tetris", "wm/tetris",
-	"Bounce", "wm/bounce"
+	"Bounce", "wm/bounce",
+	"Minesweeper", "wm/sweeper",
+	"Connect 4", "wm/c4"
 	}
 };
 

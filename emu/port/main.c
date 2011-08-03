@@ -133,26 +133,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 		cp = EARGF(badusage());
 		type = cp[0];
 		tkfont = "/fonts/pelm/ascii.12.font";
-		if (type == 's') {
-			system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
-			eventfiles = malloc(7*sizeof(char *));
-			eventfiles[0] = "/dev/input/event0";
-			eventfiles[1] = "/dev/input/event1";
-			eventfiles[2] = "/dev/input/event2";
-			eventfiles[3] = "/dev/input/event3";
-			eventfiles[4] = "/dev/input/event4";
-			eventfiles[5] = "/dev/input/event5";
-			eventfiles[6] = NULL;
-			displaydepth = 32;
-			geom("480x800");
-			mousefile = "/dev/input/event0";
-			homedevice = "/dev/input/event5";
-			voldevice = "/dev/input/event2";
-			maineventnum = 2;
-			system("echo \"on\" > /sys/power/state");
-			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
-		}
-		else if (type == 'c') {
+		if (type == 'c') {
 			system("cp /data/inferno/etc/buttonserver-nook-color.cfg /data/inferno/etc/buttonserver.cfg");
 			eventfiles = malloc(5*sizeof(char *));
 			eventfiles[0] = "/dev/input/event0";
@@ -169,8 +150,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 			maineventnum = 0;
 			system("echo \"on\" > /sys/power/state");
 			system("echo 255 > /sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness");
-		}
-		else if (type == 'e') {
+		} else if (type == 'e') {
 			eventfiles = malloc(2*sizeof(char *));
 			eventfiles[0] = "/dev/input/event0";
 			eventfiles[1] = NULL;
@@ -180,8 +160,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 			homedevice = "/dev/input/event0";
 			voldevice = "/dev/input/event0";
 			maineventnum = 0;
-		}
-		else {
+		} else {
 			system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
 			eventfiles = malloc(7*sizeof(char *));
 			eventfiles[0] = "/dev/input/event0";
@@ -196,7 +175,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 			mousefile = "/dev/input/event0";
 			homedevice = "/dev/input/event5";
 			voldevice = "/dev/input/event2";
-			maineventnum = 0;
+			maineventnum = 2;
 			system("echo \"on\" > /sys/power/state");
 			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
 		}

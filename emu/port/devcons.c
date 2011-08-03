@@ -36,12 +36,14 @@ enum
 	Qtime,
 	Quser,
 	Qbattery,
-	Qtype
+	Qtype,
+	Qbrightness,
 };
 
 Dirtab contab[] =
 {
 	".",	{Qdir, 0, QTDIR},	0,		DMDIR|0555,
+	"brightness",	{Qbrightness},	0,      0666,
 	"type",	{Qtype},	0,      0666,
 	"battery",	{Qbattery},	0,      0666,
 	"events",       {Qevents},      0,      0666,
@@ -75,6 +77,7 @@ Queue*	lineq;			/* processed console input */
 Queue*  eventq;                 /* Events imported from Linux host devices */
 Queue*	batteryq;		/* Battery level */
 Queue*	typeq;			/* Device type */
+Queue*	brightnessq;		/* Screen brightness control */
 
 int     eventfds[MAX_EVENTFDS];
 
@@ -193,6 +196,9 @@ consinit(void)
 		panic("no memory");
 	typeq = qopen(512, 0, nil, nil);
 	if(typeq == 0)
+		panic("no memory");
+	brightnessq = qopen(512, 0, nil, nil);
+	if(brightnessq == 0)
 		panic("no memory");
 	randominit();
 }
@@ -335,6 +341,7 @@ consread(Chan *c, void *va, long n, vlong offset)
 	int send;
 	char *p, buf[64], ch;
 	FILE * battery;
+	FILE * brightness;
 	int size;
 
 	if(c->qid.type & QTDIR)
@@ -480,6 +487,17 @@ consread(Chan *c, void *va, long n, vlong offset)
 		else
 			strncpy(buf, "nexus s", sizeof(buf));
 		return readstr(offset, va, n, buf);
+	case Qbrightness:
+		if(type == 'c')
+			brightness = fopen("/sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness", "r");
+		else if(type == 'e')
+			return;
+		else
+			brightness = fopen("/sys/class/backlight/s5p_bl/brightness", "r");
+		size = fread(buf, 1, sizeof(buf), brightness);
+		fclose(brightness);
+		buf[size - 1] = '\0';
+		return readstr(offset, va, n, buf);
 	}
 }
 
@@ -488,6 +506,8 @@ conswrite(Chan *c, void *va, long n, vlong offset)
 {
 	char buf[128], *a, ch;
 	int x;
+	char* str;
+	FILE * brightness;
 
 	if(c->qid.type & QTDIR)
 		error(Eperm);
@@ -614,6 +634,17 @@ conswrite(Chan *c, void *va, long n, vlong offset)
 			buf[n-1] = 0;
 		kstrdup(&ossysname, buf);
 		break;
+	case Qbrightness:
+		if(type == 'c')
+			brightness = fopen("/sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness", "w");
+		else if(type == 'e')
+			return;
+		else
+			brightness = fopen("/sys/class/backlight/s5p_bl/brightness", "w");
+		str = va;
+		fwrite(str, 1, n, brightness);
+		fclose(brightness);
+		return n;
 	}
 	return n;
 }

@@ -110,7 +110,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 
 	minimize_win := chan of string;
 	
-	spawn monitor_button(minimize_win, win, wmctxt);
+	spawn monitor_button(minimize_win, win, wmctxt, clientctxt);
 
 	for(;;) alt {
 	s := <- minimize_win =>
@@ -305,6 +305,8 @@ handlerequest(win: ref Wmclient->Window, wmctxt: ref Wmcontext, c: ref Client, r
 				r.min.y = 0;
 				r.max.x = screen.image.r.dx();
 				r.max.y = screen.image.r.dy();
+
+# attempt to change window size when kbd was launched before window was opened
 #				for(z := wmsrv->top(); z != nil; z = z.znext)
 #					if (z.id == 3) {
 #						sys->print("kbd exists\n");
@@ -789,10 +791,11 @@ organizer(clientctxt : ref Draw->Context, ready : int, done : int)
 	spawn organizer(clientctxt, ready, done);
 }
 
-monitor_button(ch : chan of string, win : ref Wmclient->Window, wmctxt: ref Wmcontext)
+monitor_button(ch : chan of string, win : ref Wmclient->Window, wmctxt: ref Wmcontext, clientctxt : ref Draw->Context)
 {
 	volup := 0;
 	voldown := 0;
+	power := 0;
 #	type : ref Sys->FD;
 	typedevice := sys->open("/dev/type", sys->OREAD);
 	whattype := array[11] of byte;
@@ -833,16 +836,97 @@ monitor_button(ch : chan of string, win : ref Wmclient->Window, wmctxt: ref Wmco
 		if (enough >= 20) wait = 1;
 	}
 
-	while(1) {
-		buf := array[64] of byte;
-		n := sys->read(fd, buf, len buf);
-		if(n == 0) {
-			return;
+	if(device == "nook color") {
+		while(1) {
+			buf := array[64] of byte;
+			n := sys->read(fd, buf, len buf);
+			if(n == 0) {
+				return;
+			}
+			buf = buf[:n];
+			output := string buf;
+			if(strstr(output, "home press") != -1) {
+				if(volup == 1) {
+					window := kbdcontact.window(".");
+					if(window == nil) {
+					kbdcontact.ctl <-= "untask";
+					resizewindow(0);
+					} else {
+						overlap := 1;
+						z := wmsrv->top();
+						if(z.id == 3) overlap = 0;
+						z = z.znext;
+						if(z.id == 3) overlap = 0;
+						if(overlap == 0) {
+						kbdcontact.ctl <-= "exit";
+						resizewindow(1);
+						} else {
+						kbdcontact.ctl <-= "raise";
+						resizewindow(0);
+						}
+					}
+				} else if(voldown == 1) {
+					for(z := wmsrv->top(); z != nil; z = z.znext)
+						if (z.id != 0 && z.id != 1) {
+							z.ctl <-= "exit";
+							if(z.id == 3) {
+								resizewindow(1);
+							}
+							focusnext();
+							break;
+						}
+				} else
+					ch <-= "minimize";
+			}
+			if(strstr(output, "volume up press") != -1) {
+				volup = 1;
+				if(power == 1) {
+					winnum := 0;
+					for(z := wmsrv->top(); z != nil; z = z.znext)
+						winnum = winnum + 1;
+					sync_brightness := chan of string;
+					argv := "wm/brightness" :: nil;
+					spawn command(clientctxt, argv, sync_brightness);
+					if((e := <- sync_brightness) != nil)
+						fatal("cannot run command wm/brightness: " + e);
+					winnow := 0;
+					while(winnow <= winnum) {
+						winnow = 0;
+						for(z = wmsrv->top(); z != nil; z = z.znext)
+							winnow = winnow + 1;
+					}
+					resizeoverride = 1;
+				}
+			}
+			if(strstr(output, "volume down press") != -1) {
+				voldown = 1;
+			}
+			if(strstr(output, "volume up release") != -1) {
+				volup = 0;
+			}
+			if(strstr(output, "volume down release") != -1) {
+				voldown = 0;
+			}
+			if(strstr(output, "power press") != -1) {
+				power = 1;
+			}
+			if(strstr(output, "power release") != -1) {
+				power = 0;
+			}
 		}
-		buf = buf[:n];
-		output := string buf;
-		if(strstr(output, "home press") != -1) {
-			if(volup == 1) {
+	} else {
+		while(1) {
+			buf := array[64] of byte;
+			n := sys->read(fd, buf, len buf);
+			if(n == 0) {
+				return;
+			}
+			buf = buf[:n];
+			output := string buf;
+			if(strstr(output, "home press") != -1) {
+				ch <-= "minimize";
+			}
+			if(strstr(output, "menu press") != -1) {
 				window := kbdcontact.window(".");
 				if(window == nil) {
 				kbdcontact.ctl <-= "untask";
@@ -861,7 +945,9 @@ monitor_button(ch : chan of string, win : ref Wmclient->Window, wmctxt: ref Wmco
 					resizewindow(0);
 					}
 				}
-			} else if(voldown == 1) {
+
+			}
+			if(strstr(output, "back press") != -1) {
 				for(z := wmsrv->top(); z != nil; z = z.znext)
 					if (z.id != 0 && z.id != 1) {
 						z.ctl <-= "exit";
@@ -871,53 +957,32 @@ monitor_button(ch : chan of string, win : ref Wmclient->Window, wmctxt: ref Wmco
 						focusnext();
 						break;
 					}
-			} else
-				ch <-= "minimize";
-		}
-		if(strstr(output, "menu press") != -1) {
-			window := kbdcontact.window(".");
-			if(window == nil) {
-			kbdcontact.ctl <-= "untask";
-			resizewindow(0);
-			} else {
-				overlap := 1;
-				z := wmsrv->top();
-				if(z.id == 3) overlap = 0;
-				z = z.znext;
-				if(z.id == 3) overlap = 0;
-				if(overlap == 0) {
-				kbdcontact.ctl <-= "exit";
-				resizewindow(1);
-				} else {
-				kbdcontact.ctl <-= "raise";
-				resizewindow(0);
-				}
 			}
-
-		}
-		if(strstr(output, "back press") != -1) {
-			for(z := wmsrv->top(); z != nil; z = z.znext)
-				if (z.id != 0 && z.id != 1) {
-					z.ctl <-= "exit";
-					if(z.id == 3) {
-						resizewindow(1);
-					}
-					focusnext();
-					break;
-				}
-		}
-		if(device == "nook color") {
+			if(strstr(output, "power press") != -1) {
+				power = 1;
+			}
+			if(strstr(output, "power release") != -1) {
+				power = 0;
+			}
 			if(strstr(output, "volume up press") != -1) {
-				volup = 1;
-			}
-			if(strstr(output, "volume down press") != -1) {
-				voldown = 1;
-			}
-			if(strstr(output, "volume up release") != -1) {
-				volup = 0;
-			}
-			if(strstr(output, "volume down release") != -1) {
-				voldown = 0;
+				if(power == 1) {
+					winnum := 0;
+					for(z := wmsrv->top(); z != nil; z = z.znext)
+						winnum = winnum + 1;
+					sync_brightness := chan of string;
+					argv := "wm/brightness" :: nil;
+					spawn command(clientctxt, argv, sync_brightness);
+					if((e := <- sync_brightness) != nil)
+						fatal("cannot run command wm/brightness: " + e);
+					winnow := 0;
+					while(winnow <= winnum) {
+						winnow = 0;
+						for(z = wmsrv->top(); z != nil; z = z.znext)
+							winnow = winnow + 1;
+					}
+					resizeoverride = 1;
+					
+				}
 			}
 		}
 	}
