@@ -76,9 +76,7 @@ Return =>			Key("Enter", '\n', SPECIALKEYSIZE, nil, 0),
 Shift =>			Key("Shift", Keyboard->LShift, SPECIALKEYSIZE, nil, 0),
 Esc =>			Key("Esc", 8r33, KEYSIZE, nil, 0),
 Ctrl =>			Key("Ctrl", Keyboard->LCtrl, KEYSIZE, nil, 0),
-Alt =>			Key("Alt", Keyboard->LAlt, SPECIALKEYSIZE, nil, 0),
 Space =>			Key(" ", ' ', KEYSIZE * 4, nil, 0),
-Space+1 =>		Key("Return", '\n', SPECIALKEYSIZE, nil, 0),
 };
 
 keys:= array[] of {
