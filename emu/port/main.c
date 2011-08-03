@@ -132,7 +132,7 @@ option(int argc, char *argv[], void (*badusage)(void))
 	case 't':
 		cp = EARGF(badusage());
 		type = cp[0];
-		tkfont = "/fonts/pelm/ascii.12.font";
+		tkfont = "/fonts/pelm/ascii.10.font";
 		if (type == 's') {
 			system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
 			eventfiles = malloc(7*sizeof(char *));
