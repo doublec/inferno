@@ -38,6 +38,7 @@ buttons := 0;
 resizeoverride := 0;
 kbdcontact : ref Wmsrv->Client;
 kbdheight : int;
+windowtable := array[100] of {"wm/windowbar", "wm/toolbar", "log", "wm/keyboard", "buttonserver"};
 
 badmodule(p: string)
 {
@@ -133,7 +134,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		# XXX could implement "pleaseexit" in order that
 		# applications can raise a warning message before
 		# they're unceremoniously dumped.
-		if(c == "exit")
+		if(c == "exit") {
 			for(z := wmsrv->top(); z != nil; z = z.znext) {
 				if (z.id != 0 && z.id != 1) {
 					z.ctl <-= "exit";
@@ -142,6 +143,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 					}
 				}
 			}
+		}
 		wmclient->win.wmctl(c);
 		if(win.image != screen.image)
 			reshaped(win);
@@ -415,6 +417,8 @@ handlerequest(win: ref Wmclient->Window, wmctxt: ref Wmcontext, c: ref Client, r
 		if(c.id == 3) {
 			resizewindow(1);
 		}
+	"newwin" =>
+		spawn updatewindowtable(hd tl args);
 	* =>
 		if(c == controller || controller == nil || (controller.flags & Controlstarted) == 0)
 			return "unknown control request";
@@ -1028,6 +1032,31 @@ resizewindow(method : int) : ref Wmsrv->Client
 		return z;
 	}
 	return nil;
+}
+
+updatewindowtable(winname : string)
+{
+	winnum := 0;
+	for(z := wmsrv->top(); z != nil; z = z.znext) {
+		winnum = winnum + 1;
+	}
+	winnow := 0;
+	while(winnow <= winnum) {
+		winnow = 0;
+		for(z = wmsrv->top(); z != nil; z = z.znext)
+			winnow = winnow + 1;
+	}
+	z = wmsrv->top();
+	windowtable[z.id] = winname;
+}
+
+ps()
+{
+	sys->print("----------------------------------------\n");
+	for(place := 0; windowtable[place] != nil; place = place + 1)
+		sys->print("%d == \"%s\"\n", place, windowtable[place]);
+	sys->sleep(5000);
+	ps();
 }
 
 strstr(s, t : string) : int

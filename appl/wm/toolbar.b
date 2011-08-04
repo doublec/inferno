@@ -299,6 +299,7 @@ launch(ctxt: ref Draw->Context, appl: string, tbtop: ref Tk->Toplevel, launchcha
 		whichmenu = 0;
 		return;
 	}
+	tkclient->wmctl(tbtop, sys->sprint("newwin %s", appl));
 	sh := load Sh Sh->PATH;
 	argv := appl :: nil;
 	sh->run(ctxt, "{$*&}" :: argv);
