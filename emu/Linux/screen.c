@@ -37,28 +37,93 @@ static int b = 0;
 static int DblTime = 300000;
 static int x, y, p, dbl = 0;
 static int lastb;
-static int touch = 0;
 
+//for Nexus S
+//see below for Nook Color
 static int xmin = 2;
-static int xadjust = 3; //shifts mouse left
-static int lowx = 5; //should be xmin + xadjust
+static int xadjust = 7; //shifts mouse left
+static int lowx = 9; //should be xmin + xadjust
 static int ymin = 2;
-static int yadjust = 11; //shifts mouse up
-static int lowy = 13; //should be ymin + yadjust
+static int yadjust = -4; //shifts mouse up //negative value helps with keyboard at the bottom of the screen
+static int lowy = -2; //should be ymin + yadjust
 
 static char mainbuttoninput[19];
 static int on = 1;
 static int powerbuttonpress = 0;
+static int voluppress = 0;
+static int nopowerconserve = 0;
 static char emulator[67];
+static int oldbrightness = 255;
+static int sizeofbuf = 0;
+static char* buf[7];
 
 static void 
-touchscreen(struct input_event* ev, int count)
+touchscreenc(struct input_event* ev, int count)
 {
     int i;
     static struct timeval lastt;
 
     for (i=0; i < count; i++){
-	//printf("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x, touch = %d\n", i, ev[i].type, ev[i].code, ev[i].value, touch);
+	//printf("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+	/*if(0) {
+		fprint(2, "%d/%d [%d] ", i, count, ev[i].code);
+	}*/
+	switch(ev[i].type){
+	case EV_ABS:
+		switch(ev[i].code){
+		case 0x30:		// ABS_MT_TOUCH_MAJOR
+			if (ev[i].value) {
+				b = 1;
+			} else if (ev[i].value == 0) {
+				b = 0;
+			}
+			break;
+		case 0x36:		// ABS_MT_POSITION_X
+			if(!rotation_opt) {
+				if (ev[i].value > lowx)
+					x = ev[i].value - xadjust;
+				else
+					x = xmin;
+				break;
+			} else {
+				if (ev[i].value > lowy)
+					y = ev[i].value - yadjust;
+				else
+					y = ymin;
+				break;
+			}
+			break;
+		case 0x35:		//ABS_MT_POSITION_Y
+			if(!rotation_opt) {
+				if (Ysize-ev[i].value > lowy)
+					y = Ysize-ev[i].value - yadjust;
+				else
+					y = ymin;
+				break;
+			} else {
+				if (ev[i].value > lowx)
+					x = ev[i].value - xadjust;
+				else
+					x = xmin;
+				break;
+			}
+			break;
+			}
+			break;
+	case EV_SYN:
+	    mousetrack(b, x, y, 0);
+	    return;
+	}
+    }
+}
+
+touchscreene(struct input_event* ev, int count)
+{
+    int i;
+    static struct timeval lastt;
+
+    for (i=0; i < count; i++){
+	//printf("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
 	/*if(0) {
 		fprint(2, "%d/%d [%d] ", i, count, ev[i].code);
 	}*/
@@ -71,85 +136,11 @@ touchscreen(struct input_event* ev, int count)
 		case ABS_Y:
 			y = ev[i].value;
 			break;
-		case ABS_PRESSURE:
-			p = ev[i].value;
-			break;
-		case 0x30:		// ABS_MT_TOUCH_MAJOR
-			if (ev[i].value) {
-				touch = 1;
-				b = 1;
-			} else if (ev[i].value == 0) {
-				touch = 0;
-				b = 0;
-			}
-			break;
-		case 0x36:		// ABS_MT_POSITION_X
-			if (type == 's') {
-				if(!rotation_opt) {
-					if ((ev[i].value * 800 / 1024) > lowy)
-						y = (ev[i].value * 800 /1024) - yadjust;
-					else
-						y = ymin;
-					break;
-				} else {
-					if ((ev[i].value * 800 / 1024) > lowx)
-						x = (ev[i].value * 800 / 1024) - xadjust;
-					else
-						x = xmin;
-					break;
-				}
-			} else {
-				if(!rotation_opt) {
-					if (ev[i].value > lowx)
-						x = ev[i].value - xadjust;
-					else
-						x = xmin;
-					break;
-				} else {
-					if (ev[i].value > lowy)
-						y = ev[i].value - yadjust;
-					else
-						y = ymin;
-					break;
-				}
-			}
-			break;
-		case 0x35:		//ABS_MT_POSITION_Y
-			if (type == 's') {
-				if(!rotation_opt) {
-					if ((ev[i].value * 480 /1024) > lowx)
-						x = (ev[i].value * 480 /1024) - xadjust;
-					else
-						x = xmin;
-					break;
-				} else {
-					if ((Ysize-ev[i].value * 480 /1024) > lowy)
-						y = (Ysize-ev[i].value * 480 / 1024) - yadjust;
-					else
-						y = ymin;
-					break;
-				}
-			} else {
-				if(!rotation_opt) {
-					if (Ysize-ev[i].value > lowy)
-						y = Ysize-ev[i].value - yadjust;
-					else
-						y = ymin;
-					break;
-				} else {
-					if (ev[i].value > lowx)
-						x = ev[i].value - xadjust;
-					else
-						x = xmin;
-					break;
-				}
-			}
 			break;
 			}
 			break;
 	case EV_KEY:
 	    if (ev[i].value){
-		touch=1;
 		b = 1;
 		if(b==lastb && ev[i].time.tv_sec == lastt.tv_sec &&
 		   (ev[i].time.tv_usec-lastt.tv_usec) < DblTime)
@@ -159,7 +150,6 @@ touchscreen(struct input_event* ev, int count)
 		if(dbl)
 		    b = b | 1<<8;
 	    } else {
-		touch = 0;
 		lastb = b;
 		lastt = ev[i].time;
 		b = 0;
@@ -172,7 +162,67 @@ touchscreen(struct input_event* ev, int count)
     }
 }
 
-static void fbreadmouse(void* v)
+touchscreens(struct input_event* ev, int count)
+{
+    int i;
+    static struct timeval lastt;
+
+    for (i=0; i < count; i++){
+	//printf("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+	/*if(0) {
+		fprint(2, "%d/%d [%d] ", i, count, ev[i].code);
+	}*/
+	switch(ev[i].type){
+	case EV_ABS:
+		switch(ev[i].code){
+		case 0x30:		// ABS_MT_TOUCH_MAJOR
+			if (ev[i].value) {
+				b = 1;
+			} else if (ev[i].value == 0) {
+				b = 0;
+			}
+			break;
+		case 0x36:		// ABS_MT_POSITION_X
+			if(!rotation_opt) {
+				if ((ev[i].value * 800 / 1024) > lowy)
+					y = (ev[i].value * 800 /1024) - yadjust;
+				else
+					y = ymin;
+				break;
+			} else {
+				if ((ev[i].value * 800 / 1024) > lowx)
+					x = (ev[i].value * 800 / 1024) - xadjust;
+				else
+					x = xmin;
+				break;
+			}
+			break;
+		case 0x35:		//ABS_MT_POSITION_Y
+			if(!rotation_opt) {
+				if ((ev[i].value * 480 /1024) > lowx)
+					x = (ev[i].value * 480 /1024) - xadjust;
+				else
+					x = xmin;
+				break;
+			} else {
+				if ((Ysize-ev[i].value * 480 /1024) > lowy)
+					y = (Ysize-ev[i].value * 480 / 1024) - yadjust;
+				else
+					y = ymin;
+				break;
+			}
+			break;
+			}
+			break;
+	    break;
+	case EV_SYN:
+		mousetrack(b, x, y, 0);
+		return;
+	}
+    }
+}
+
+static void fbreadmousec(void* v)
 {
 	int rd, value, size = sizeof(struct input_event);
 	struct input_event ev[64];
@@ -183,13 +233,37 @@ static void fbreadmouse(void* v)
 			sleep(1);
 		}
 
-		for (i = 0; i < rd / size; i++) {
-			//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
-			if (ev[i].value == 0 && ev[i].code == 30) {
-				return;
-			}
+		touchscreenc(ev, (rd / size));
+	}
+}
+
+static void fbreadmousee(void* v)
+{
+	int rd, value, size = sizeof(struct input_event);
+	struct input_event ev[64];
+	int i;
+	while (1){
+		if ((rd = read (eventfd, ev, sizeof(ev))) < size) {
+			print("read %d instead of %d\n", rd, size);
+			sleep(1);
 		}
-		touchscreen(ev, (rd / size));
+
+		touchscreene(ev, (rd / size));
+	}
+}
+
+static void fbreadmouses(void* v)
+{
+	int rd, value, size = sizeof(struct input_event);
+	struct input_event ev[64];
+	int i;
+	while (1){
+		if ((rd = read (eventfd, ev, sizeof(ev))) < size) {
+			print("read %d instead of %d\n", rd, size);
+			sleep(1);
+		}
+
+		touchscreens(ev, (rd / size));
 	}
 }
 
@@ -209,43 +283,26 @@ static void readbutton(void* v)
 			if (ev[i].code == 0x74) {
 				if (ev[i].value == 1) {
 					powerbuttonpress = 1;
-				}
-				else if (ev[i].value == 0) {
-					if (powerbuttonpress == 1) {
-						if (type == 's') {
-							FILE * power;
-							power = fopen("/sys/power/state", "w");
+					if (voluppress == 1)
+						nopowerconserve = 1;
+				} else {
+					if (powerbuttonpress == 1 && nopowerconserve == 0) {
+						if (type == 'c') {
+							FILE * brightnessw;
+							brightnessw = fopen("/sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness", "w");
 							if (on == 1) {
-								fwrite("mem\n", 1, 4, power);
-								on = 0;
-							} else {
-								fwrite("on\n", 1, 3, power);
-								on = 1;
-							}
-							fclose(power);
-						} else if (type == 'c') {
-							FILE * brightness;
-							brightness = fopen("/sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness", "w");
-							if (on == 1) {
-								fwrite("0\n", 1, 2, brightness);
+								FILE * brightnessr;
+								brightnessr = fopen("/sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness", "r");
+								sizeofbuf = fread(buf, 1, sizeof(buf), brightnessr);
+								fwrite("0\n", 1, 2, brightnessw);
 								printf("Warning: avoided changing power state; instead brightness changed\n");
 								on = 0;
+								fclose(brightnessr);
 							} else {
-								fwrite("255\n", 1, 4, brightness);
+								fwrite(buf, 1, sizeofbuf, brightnessw);
 								on = 1;
 							}
-							fclose(brightness);
-						} else if (type == 'e') {
-							FILE * power;
-							power = fopen("/sys/power/state", "w");
-							if (on == 1) {
-								fwrite("mem\n", 1, 4, power);
-								on = 0;
-							} else {
-								fwrite("on\n", 1, 3, power);
-								on = 1;
-							}
-							fclose(power);
+							fclose(brightnessw);
 						} else {
 							FILE * power;
 							power = fopen("/sys/power/state", "w");
@@ -260,6 +317,7 @@ static void readbutton(void* v)
 						}
 					}
 					powerbuttonpress = 0;
+					nopowerconserve = 0;
 				}
 			}
 		}
@@ -301,6 +359,14 @@ static void readvolbutton(void* v)
 				char* args[3] = {"/system/bin/reboot", "-p", NULL};
 				execve(args[0], args, NULL);
 			}
+			if (ev[i].code == 0x73) {
+				if (ev[i].value == 1) {
+					voluppress = 1;
+					if (powerbuttonpress == 1)
+						nopowerconserve = 1;
+				} else
+					voluppress = 0;
+			}
 		}
     }
 }
@@ -330,7 +396,20 @@ uchar* attachscreen ( Rectangle *rect, ulong *chan, int *depth, int *width, int 
     }
 
 	eventfd = open(mousefile, O_RDONLY);
-	kproc("readmouse", fbreadmouse, nil, 0);
+	if (type == 'c') {
+		//for Nook Color
+		xmin = 2;
+		xadjust = 0; //shifts mouse left
+		lowx = xmin + xadjust;
+		ymin = 2;
+		yadjust = 5; //shifts mouse up
+		lowy = ymin + yadjust;
+		kproc("readmouse", fbreadmousec, nil, 0);
+	}
+	else if (type == 'e')
+		kproc("readmouse", fbreadmousee, nil, 0);
+	else
+		kproc("readmouse", fbreadmouses, nil, 0);
 
 	sprintf(mainbuttoninput, "/dev/input/event%d", maineventnum);
 	mainbuttonfd = open(mainbuttoninput, O_RDONLY);
@@ -387,32 +466,32 @@ void flushmemscreen ( Rectangle rect )
 	rect.max.y = Ysize;
 
     if ( ( rect.max.x < rect.min.x ) || ( rect.max.y < rect.min.y ) )
-	return;
+		return;
     if(rotation_opt) {
-	uchar *cur_col;
-	uchar *fb_begin = fb;
-	uchar *scr_begin = screen;
-	int fb_bpl = Ysize * depth;
-	int fb_startx, fb_starty;
-	fb_starty = Xsize - rect.min.x;
-	fb_startx = rect.min.y;
-	fb += fb_starty * fb_bpl + fb_startx * depth;
-	screen += rect.min.y * bpl + rect.min.x * depth;
-	cur_col = fb;
-	for(i = rect.min.y; i < rect.max.y; i++) {
-	    fb = cur_col;
-	    for(j = rect.min.x; j < rect.max.x; j++) {
-		memcpy(fb, screen, depth);
-		fb -= fb_bpl;
-		screen += depth;
-	    }
-	    cur_col += depth;
-	    screen += depth * ((Xsize - rect.max.x) + rect.min.x);
-	}
+		uchar *cur_col;
+		uchar *fb_begin = fb;
+		uchar *scr_begin = screen;
+		int fb_bpl = Ysize * depth;
+		int fb_startx, fb_starty;
+		fb_starty = Xsize - rect.min.x;
+		fb_startx = rect.min.y;
+		fb += fb_starty * fb_bpl + fb_startx * depth;
+		screen += rect.min.y * bpl + rect.min.x * depth;
+		cur_col = fb;
+		for(i = rect.min.y; i < rect.max.y; i++) {
+		    fb = cur_col;
+			for(j = rect.min.x; j < rect.max.x; j++) {
+				memcpy(fb, screen, depth);
+				fb -= fb_bpl;
+				screen += depth;
+	    	}
+			cur_col += depth;
+			screen += depth * ((Xsize - rect.max.x) + rect.min.x);
+		}
     } else {
-	fb += rect.min.y * bpl + rect.min.x * depth;
-	screen += rect.min.y * bpl + rect.min.x * depth;
-	width = ( rect.max.x - rect.min.x ) * depth;
+		fb += rect.min.y * bpl + rect.min.x * depth;
+		screen += rect.min.y * bpl + rect.min.x * depth;
+		width = ( rect.max.x - rect.min.x ) * depth;
 	for ( i = rect.min.y; i < rect.max.y; i++ ) {
 	    memcpy ( fb, screen, width );
 	    fb += bpl;
@@ -439,23 +518,23 @@ static void initscreen ( int aXSize, int aYSize, ulong *chan, int *depth )
     framebuffer = framebuffer_get_buffer ();
     switch ( *depth ) {
     case 16: //16bit RGB (2 bytes, red 5@11, green 6@5, blue 5@0) 
-	*chan = RGB16;
-	pointer = PointerRGB16;
-	pointerwidth = PointerRGB16Width;
-	pointerheight = PointerRGB16Height;
-	break;
+		*chan = RGB16;
+		pointer = PointerRGB16;
+		pointerwidth = PointerRGB16Width;
+		pointerheight = PointerRGB16Height;
+		break;
     case 24: //24bit RGB (3 bytes, red 8@16, green 8@8, blue 8@0) 
-	*chan = RGB24;
-	pointer = PointerRGB24;
-	pointerwidth = PointerRGB24Width;
-	pointerheight = PointerRGB24Height;
-	break;
+		*chan = RGB24;
+		pointer = PointerRGB24;
+		pointerwidth = PointerRGB24Width;
+		pointerheight = PointerRGB24Height;
+		break;
     case 32: //24bit RGB (4 bytes, nothing@24, red 8@16, green 8@8, blue 8@0)
-	*chan = XRGB32;
-	pointer = PointerRGB32;
-	pointerwidth = PointerRGB32Width;
-	pointerheight = PointerRGB32Height;
-	break;
+		*chan = XRGB32;
+		pointer = PointerRGB32;
+		pointerwidth = PointerRGB32Width;
+		pointerheight = PointerRGB32Height;
+		break;
     }
 }
 

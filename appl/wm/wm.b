@@ -35,6 +35,10 @@ allowcontrol := 1;
 fakekbd: chan of string;
 fakekbdin: chan of string;
 buttons := 0;
+resizeoverride := 0;
+kbdcontact : ref Wmsrv->Client;
+kbdheight : int;
+windowtable := array[100] of {"wm/windowbar", "wm/toolbar", "log", "wm/keyboard", "buttonserver"};
 
 badmodule(p: string)
 {
@@ -94,46 +98,31 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	if(wmrectIO == nil)
 		fatal(sys->sprint("cannot make /chan/wmrect: %r"));
 
-	sync := chan of string;
 	sync_wb := chan of string;
-	sync_bsrv := chan of string;
-	argv = tl argv;
 	argv = "wm/windowbar" :: nil;
 	spawn command(clientctxt, argv, sync_wb);
 	if((e := <- sync_wb) != nil)
 		fatal("cannot run command " + hd argv + ": " + e);
-	argv = "wm/toolbar" :: nil;
-	spawn command(clientctxt, argv, sync);
-	if((e = <- sync) != nil)
-		fatal("cannot run command " + hd argv + ": " + e);
-	# FIXME: this is the wrong place to put this
-	# need to look for a place where buttonserver will be run on startup
-	argv = "buttonserver" :: nil;
-	spawn command(clientctxt, argv, sync_bsrv);
-	if((e = <- sync_bsrv) != nil)
-		fatal("cannot run command " + hd argv + ": " + e);
+	ready : int;
+	done := 0;
+	spawn organizer(clientctxt, ready, done);
 
 	fakekbd = chan of string;
 
 	minimize_win := chan of string;
 	
-	spawn monitor_button(minimize_win);
+	spawn monitor_button(minimize_win, win, wmctxt, clientctxt);
 
 	for(;;) alt {
 	s := <- minimize_win =>
 		if(kbdfocus != nil) {
-			if(kbdfocus.id == 1) {
+			if(kbdfocus.id == 1 || kbdfocus.id == 0) {
 				break;
 			}
 			kbdfocus.ctl <-= "task";
 			old := kbdfocus;
 			kbdfocus = nil;
-			for(z := wmsrv->top(); z != nil; z = z.znext) {
-				if(z != old && z.id != 0) {
-					kbdfocus = z;
-					break;
-				}
-			}
+			focusnext();
 			old.ctl <-= "haskbdfocus 0";
 			if(kbdfocus != nil) {
 				kbdfocus.ctl <-= "haskbdfocus 1";
@@ -145,10 +134,16 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		# XXX could implement "pleaseexit" in order that
 		# applications can raise a warning message before
 		# they're unceremoniously dumped.
-		if(c == "exit")
-			for(z := wmsrv->top(); z != nil; z = z.znext)
-				z.ctl <-= "exit";
-
+		if(c == "exit") {
+			for(z := wmsrv->top(); z != nil; z = z.znext) {
+				if (z.id != 0 && z.id != 1) {
+					z.ctl <-= "exit";
+					if(z.id == 3) {
+						resizewindow(1);
+					}
+				}
+			}
+		}
 		wmclient->win.wmctl(c);
 		if(win.image != screen.image)
 			reshaped(win);
@@ -305,6 +300,30 @@ handlerequest(win: ref Wmclient->Window, wmctxt: ref Wmcontext, c: ref Client, r
 		r.min.y = int hd args; args = tl args;
 		r.max.x = int hd args; args = tl args;
 		r.max.y = int hd args; args = tl args;
+		if (c != nil) {
+			if (c.id != 0 && c.id != 1 && c.id != 3 && resizeoverride == 0) {
+#				window : ref Wmsrv->Window;
+				r.min.x = 0;
+				r.min.y = 0;
+				r.max.x = screen.image.r.dx();
+				r.max.y = screen.image.r.dy();
+
+# attempt to change window size when kbd was launched before window was opened
+#				for(z := wmsrv->top(); z != nil; z = z.znext)
+#					if (z.id == 3) {
+#						sys->print("kbd exists\n");
+#						window := z.window(".");
+#						if(window != nil) {
+#							sys->print("kbd present\n");
+#							r.max.y = screen.image.r.dy() - kbdheight;
+#						}
+#						break;
+#					}
+				kbdfocus = c;
+				kbdfocus.ctl <-= "haskbdfocus 1";
+			}
+			resizeoverride = 0;
+		}
 		if(args != nil){
 			case hd args{
 			"onscreen" =>
@@ -346,14 +365,19 @@ handlerequest(win: ref Wmclient->Window, wmctxt: ref Wmcontext, c: ref Client, r
 		if(w == nil)
 			return "no such tag";
 		if(ismove){
-			if(n != 5)
-				return "bad arg count";
-			return dragwin(wmctxt.ptr, c, w, Point(int hd args, int hd tl args).sub(w.r.min));
+#			if(c.id == 3) {
+#				if(n != 5)
+#					return "bad arg count";
+#				return dragwin(wmctxt.ptr, c, w, Point(int hd args, int hd tl args).sub(w.r.min));
+#			}
 		}else{
-			if(n != 5)
-				return "bad arg count";
-			sizewin(wmctxt.ptr, c, w, Point(int hd args, int hd tl args));
+			if(c.id == 3) {
+				if(n != 5)
+					return "bad arg count";
+#				sizewin(wmctxt.ptr, c, w, Point(int hd args, int hd tl args));
+			}
 		}
+		return "request denied";
 	"fixedorigin" =>
 		c.flags |= Fixedorigin;
 	"rect" =>
@@ -388,6 +412,13 @@ handlerequest(win: ref Wmclient->Window, wmctxt: ref Wmcontext, c: ref Client, r
 		controller = nil;
 		allowcontrol = 1;
 		c.flags &= ~(Controlstarted | Controller);
+	"task" =>
+		controller.ctl <-= "request " + string c.id + " " + req;
+		if(c.id == 3) {
+			resizewindow(1);
+		}
+	"newwin" =>
+		spawn updatewindowtable(hd tl args);
 	* =>
 		if(c == controller || controller == nil || (controller.flags & Controlstarted) == 0)
 			return "unknown control request";
@@ -466,39 +497,39 @@ dragwin(ptr: chan of ref Pointer, c: ref Client, w: ref Window, off: Point): str
 	return nil;
 }
 
-sizewin(ptrc: chan of ref Pointer, c: ref Client, w: ref Window, minsize: Point): string
-{
-	borders := array[4] of ref Image;
-	showborders(borders, w.r, Minx|Maxx|Miny|Maxy);
-	screen.image.flush(Draw->Flushnow);
-	while((ptr := <-ptrc).buttons == 0)
-		;
-	xy := ptr.xy;
-	move, show: int;
-	offset := Point(0, 0);
-	r := w.r;
-	show = Minx|Miny|Maxx|Maxy;
-	if(xy.in(w.r) == 0){
-		r = (xy, xy);
-		move = Maxx|Maxy;
-	}else {
-		if(xy.x < (r.min.x+r.max.x)/2){
-			move=Minx;
-			offset.x = xy.x - r.min.x;
-		}else{
-			move=Maxx;
-			offset.x = xy.x - r.max.x;
-		}
-		if(xy.y < (r.min.y+r.max.y)/2){
-			move |= Miny;
-			offset.y = xy.y - r.min.y;
-		}else{
-			move |= Maxy;
-			offset.y = xy.y - r.max.y;
-		}
-	}
-	return reshape(c, w.tag, sweep(ptrc, r, offset, borders, move, show, minsize));
-}
+#sizewin(ptrc: chan of ref Pointer, c: ref Client, w: ref Window, minsize: Point): string
+#{
+#	borders := array[4] of ref Image;
+#	showborders(borders, w.r, Minx|Maxx|Miny|Maxy);
+#	screen.image.flush(Draw->Flushnow);
+#	while((ptr := <-ptrc).buttons == 0)
+#		;
+#	xy := ptr.xy;
+#	move, show: int;
+#	offset := Point(0, 0);
+#	r := w.r;
+#	show = Minx|Miny|Maxx|Maxy;
+#	if(xy.in(w.r) == 0){
+#		r = (xy, xy);
+#		move = Maxx|Maxy;
+#	}else {
+#		if(xy.x < (r.min.x+r.max.x)/2){
+#			move=Minx;
+#			offset.x = xy.x - r.min.x;
+#		}else{
+#			move=Maxx;
+#			offset.x = xy.x - r.max.x;
+#		}
+#		if(xy.y < (r.min.y+r.max.y)/2){
+#			move |= Miny;
+#			offset.y = xy.y - r.min.y;
+#		}else{
+#			move |= Maxy;
+#			offset.y = xy.y - r.max.y;
+#		}
+#	}
+#	return reshape(c, w.tag, sweep(ptrc, r, offset, borders, move, show, minsize));
+#}
 
 reshape(c: ref Client, tag: string, r: Rect): string
 {
@@ -510,75 +541,76 @@ reshape(c: ref Client, tag: string, r: Rect): string
 		img := screen.newwindow(r, Draw->Refbackup, Draw->Nofill);
 		if(img == nil)
 			return sys->sprint("window creation failed: %r");
-		if(c.setimage(tag, img) == -1)
+		if(c.setimage(tag, img) == -1) {
 			return "can't do two at once";
+			}
 	}
 	c.top();
 	return nil;
 }
 
-sweep(ptr: chan of ref Pointer, r: Rect, offset: Point, borders: array of ref Image, move, show: int, min: Point): Rect
-{
-	while((p := <-ptr).buttons != 0){
-		xy := p.xy.sub(offset);
-		if(move&Minx)
-			r.min.x = xy.x;
-		if(move&Miny)
-			r.min.y = xy.y;
-		if(move&Maxx)
-			r.max.x = xy.x;
-		if(move&Maxy)
-			r.max.y = xy.y;
-		showborders(borders, r, show);
-	}
-	r = r.canon();
-	if(r.min.y < screen.image.r.min.y){
-		r.min.y = screen.image.r.min.y;
-		r = r.canon();
-	}
-	if(r.dx() < min.x){
-		if(move & Maxx)
-			r.max.x = r.min.x + min.x;
-		else
-			r.min.x = r.max.x - min.x;
-	}
-	if(r.dy() < min.y){
-		if(move & Maxy)
-			r.max.y = r.min.y + min.y;
-		else {
-			r.min.y = r.max.y - min.y;
-			if(r.min.y < screen.image.r.min.y){
-				r.min.y = screen.image.r.min.y;
-				r.max.y = r.min.y + min.y;
-			}
-		}
-	}
-	return r;
-}
+#sweep(ptr: chan of ref Pointer, r: Rect, offset: Point, borders: array of ref Image, move, show: int, min: Point): Rect
+#{
+#	while((p := <-ptr).buttons != 0){
+#		xy := p.xy.sub(offset);
+#		if(move&Minx)
+#			r.min.x = xy.x;
+#		if(move&Miny)
+#			r.min.y = xy.y;
+#		if(move&Maxx)
+#			r.max.x = xy.x;
+#		if(move&Maxy)
+#			r.max.y = xy.y;
+#		showborders(borders, r, show);
+#	}
+#	r = r.canon();
+#	if(r.min.y < screen.image.r.min.y){
+#		r.min.y = screen.image.r.min.y;
+#		r = r.canon();
+#	}
+#	if(r.dx() < min.x){
+#		if(move & Maxx)
+#			r.max.x = r.min.x + min.x;
+#		else
+#			r.min.x = r.max.x - min.x;
+#	}
+#	if(r.dy() < min.y){
+#		if(move & Maxy)
+#			r.max.y = r.min.y + min.y;
+#		else {
+#			r.min.y = r.max.y - min.y;
+#			if(r.min.y < screen.image.r.min.y){
+#				r.min.y = screen.image.r.min.y;
+#				r.max.y = r.min.y + min.y;
+#			}
+#		}
+#	}
+#	return r;
+#}
 
-showborders(b: array of ref Image, r: Rect, show: int)
-{
-	r = r.canon();
-	b[Sminx] = showborder(b[Sminx], show&Minx,
-		(r.min, (r.min.x+Bdwidth, r.max.y)));
-	b[Sminy] = showborder(b[Sminy], show&Miny,
-		((r.min.x+Bdwidth, r.min.y), (r.max.x-Bdwidth, r.min.y+Bdwidth)));
-	b[Smaxx] = showborder(b[Smaxx], show&Maxx,
-		((r.max.x-Bdwidth, r.min.y), (r.max.x, r.max.y)));
-	b[Smaxy] = showborder(b[Smaxy], show&Maxy,
-		((r.min.x+Bdwidth, r.max.y-Bdwidth), (r.max.x-Bdwidth, r.max.y)));
-}
+#showborders(b: array of ref Image, r: Rect, show: int)
+#{
+#	r = r.canon();
+#	b[Sminx] = showborder(b[Sminx], show&Minx,
+#		(r.min, (r.min.x+Bdwidth, r.max.y)));
+#	b[Sminy] = showborder(b[Sminy], show&Miny,
+#		((r.min.x+Bdwidth, r.min.y), (r.max.x-Bdwidth, r.min.y+Bdwidth)));
+#	b[Smaxx] = showborder(b[Smaxx], show&Maxx,
+#		((r.max.x-Bdwidth, r.min.y), (r.max.x, r.max.y)));
+#	b[Smaxy] = showborder(b[Smaxy], show&Maxy,
+#		((r.min.x+Bdwidth, r.max.y-Bdwidth), (r.max.x-Bdwidth, r.max.y)));
+#}
 
-showborder(b: ref Image, show: int, r: Rect): ref Image
-{
-	if(!show)
-		return nil;
-	if(b != nil && b.r.size().eq(r.size()))
-		b.origin(r.min, r.min);
-	else
-		b = screen.newwindow(r, Draw->Refbackup, Draw->Red);
-	return b;
-}
+#showborder(b: ref Image, show: int, r: Rect): ref Image
+#{
+#	if(!show)
+#		return nil;
+#	if(b != nil && b.r.size().eq(r.size()))
+#		b.origin(r.min, r.min);
+#	else
+#		b = screen.newwindow(r, Draw->Refbackup, Draw->Red);
+#	return b;
+#}
 
 r2s(r: Rect): string
 {
@@ -726,32 +758,305 @@ command(ctxt: ref Draw->Context, args: list of string, sync: chan of string)
 	c->init(ctxt, args);
 }
 
-monitor_button(ch : chan of string)
+organizer(clientctxt : ref Draw->Context, ready : int, done : int)
 {
+	ready = 0;
+	for(z := wmsrv->top(); z != nil; z = z.znext) {
+		ready = ready + 1;
+	}
+	argv : list of string;
+	if (done != ready) {
+		if (ready == 1) {
+			sync := chan of string;
+			argv = "wm/toolbar" :: nil;
+			spawn command(clientctxt, argv, sync);
+			if((e := <- sync) != nil)
+				fatal("cannot run command " + hd argv + ": " + e);
+		}
+		if (ready == 3) {
+			sync_kbd := chan of string;
+			argv = "wm/keyboard" :: "-e" :: nil;
+			spawn command(clientctxt, argv, sync_kbd);
+			if((e := <- sync_kbd) != nil)
+				fatal("cannot run command " + hd argv + ": " + e);
+		}
+		# FIXME: this is the wrong place to put this
+		# need to look for a place where buttonserver will be run on startup
+		if (ready == 4) {
+			sync_bsrv := chan of string;
+			argv = "buttonserver" :: nil;
+			spawn command(clientctxt, argv, sync_bsrv);
+			if((e := <- sync_bsrv) != nil)
+				fatal("cannot run command " + hd argv + ": " + e);
+			return;
+		}
+	}
+	done = ready;
+	spawn organizer(clientctxt, ready, done);
+}
+
+monitor_button(ch : chan of string, win : ref Wmclient->Window, wmctxt: ref Wmcontext, clientctxt : ref Draw->Context)
+{
+	volup := 0;
+	voldown := 0;
+	power := 0;
+#	type : ref Sys->FD;
+	typedevice := sys->open("/dev/type", sys->OREAD);
+	whattype := array[11] of byte;
+	length := sys->read(typedevice, whattype, len whattype);
+	whattype = whattype[:length];
+	device := string whattype;
 	fd : ref Sys->FD;
 	while(sys->sleep(1) == 0) { # hack to wait till buttonserver is ready
 		fd = sys->open("/dev/buttons", sys->OREAD);
-#		if(fd == nil) {
-#			sys->print("could not open /dev/buttons: %r\n");
-#			return;
-#		}
 		if(fd != nil) {
 			break;
 		}
 	}
-	while(1) {
-		newstr : string;
-		buf := array[64] of byte;
-		n := sys->read(fd, buf, len buf);
-		if(n == 0) {
-			return;
+
+	kbdcontact : ref Client;
+
+	wait := 0;
+	enough := 0;
+	while(wait != 1) {
+		for(z := wmsrv->top(); z != nil; z = z.znext) {
+			if(z.id == 3 && wait != 2) {
+				kbdcontact = z;
+				kbdfocus = kbdcontact;
+				window := kbdcontact.window(".");
+				kbdheight = window.r.max.y - window.r.min.y;
+				kbdcontact.ctl <-= "exit";
+				wait = wait + 2;
+				break;
+			}
+			if(z.id == 2 && wait != -1) {
+				kbdfocus = z;
+				ch <-= "minimize";
+				wait = wait - 1;
+				break;
+			}
 		}
-		buf = buf[:n];
-		str := string buf;
-		if(strstr(str, "home press") != -1) {
-			ch <-= "minimize";
+		enough = enough + 1;
+		if (enough >= 20) wait = 1;
+	}
+
+	if(device == "nook color") {
+		while(1) {
+			buf := array[64] of byte;
+			n := sys->read(fd, buf, len buf);
+			if(n == 0) {
+				return;
+			}
+			buf = buf[:n];
+			output := string buf;
+			if(strstr(output, "home press") != -1) {
+				if(volup == 1) {
+					window := kbdcontact.window(".");
+					if(window == nil) {
+					kbdcontact.ctl <-= "untask";
+					resizewindow(0);
+					} else {
+						overlap := 1;
+						z := wmsrv->top();
+						if(z.id == 3) overlap = 0;
+						z = z.znext;
+						if(z.id == 3) overlap = 0;
+						if(overlap == 0) {
+						kbdcontact.ctl <-= "exit";
+						resizewindow(1);
+						} else {
+						kbdcontact.ctl <-= "raise";
+						resizewindow(0);
+						}
+					}
+				} else if(voldown == 1) {
+					for(z := wmsrv->top(); z != nil; z = z.znext)
+						if (z.id != 0 && z.id != 1) {
+							z.ctl <-= "exit";
+							if(z.id == 3) {
+								resizewindow(1);
+							}
+							focusnext();
+							break;
+						}
+				} else
+					ch <-= "minimize";
+			}
+			if(strstr(output, "volume up press") != -1) {
+				volup = 1;
+				if(power == 1) {
+					winnum := 0;
+					for(z := wmsrv->top(); z != nil; z = z.znext)
+						winnum = winnum + 1;
+					sync_brightness := chan of string;
+					argv := "wm/brightness" :: nil;
+					spawn command(clientctxt, argv, sync_brightness);
+					if((e := <- sync_brightness) != nil)
+						fatal("cannot run command wm/brightness: " + e);
+					winnow := 0;
+					while(winnow <= winnum) {
+						winnow = 0;
+						for(z = wmsrv->top(); z != nil; z = z.znext)
+							winnow = winnow + 1;
+					}
+					resizeoverride = 1;
+				}
+			}
+			if(strstr(output, "volume down press") != -1) {
+				voldown = 1;
+			}
+			if(strstr(output, "volume up release") != -1) {
+				volup = 0;
+			}
+			if(strstr(output, "volume down release") != -1) {
+				voldown = 0;
+			}
+			if(strstr(output, "power press") != -1) {
+				power = 1;
+			}
+			if(strstr(output, "power release") != -1) {
+				power = 0;
+			}
+		}
+	} else {
+		while(1) {
+			buf := array[64] of byte;
+			n := sys->read(fd, buf, len buf);
+			if(n == 0) {
+				return;
+			}
+			buf = buf[:n];
+			output := string buf;
+			if(strstr(output, "home press") != -1) {
+				ch <-= "minimize";
+			}
+			if(strstr(output, "menu press") != -1) {
+				window := kbdcontact.window(".");
+				if(window == nil) {
+				kbdcontact.ctl <-= "untask";
+				resizewindow(0);
+				} else {
+					overlap := 1;
+					z := wmsrv->top();
+					if(z.id == 3) overlap = 0;
+					z = z.znext;
+					if(z.id == 3) overlap = 0;
+					if(overlap == 0) {
+					kbdcontact.ctl <-= "exit";
+					resizewindow(1);
+					} else {
+					kbdcontact.ctl <-= "raise";
+					resizewindow(0);
+					}
+				}
+
+			}
+			if(strstr(output, "back press") != -1) {
+				for(z := wmsrv->top(); z != nil; z = z.znext)
+					if (z.id != 0 && z.id != 1) {
+						z.ctl <-= "exit";
+						if(z.id == 3) {
+							resizewindow(1);
+						}
+						focusnext();
+						break;
+					}
+			}
+			if(strstr(output, "power press") != -1) {
+				power = 1;
+			}
+			if(strstr(output, "power release") != -1) {
+				power = 0;
+			}
+			if(strstr(output, "volume up press") != -1) {
+				if(power == 1) {
+					winnum := 0;
+					for(z := wmsrv->top(); z != nil; z = z.znext)
+						winnum = winnum + 1;
+					sync_brightness := chan of string;
+					argv := "wm/brightness" :: nil;
+					spawn command(clientctxt, argv, sync_brightness);
+					if((e := <- sync_brightness) != nil)
+						fatal("cannot run command wm/brightness: " + e);
+					winnow := 0;
+					while(winnow <= winnum) {
+						winnow = 0;
+						for(z = wmsrv->top(); z != nil; z = z.znext)
+							winnow = winnow + 1;
+					}
+					resizeoverride = 1;
+					
+				}
+			}
 		}
 	}
+}
+
+focusnext() : ref Wmsrv->Client
+{
+	# looks for open window and raises it
+	for(z := wmsrv->top(); z != nil; z = z.znext) {
+		if (z.id != 0 && z.id != 1) {
+			window := z.window(".");
+			if(window != nil) {
+				z.ctl <-= "raise";
+				break;
+			}
+		}
+	}
+	return z;
+}
+
+resizewindow(method : int) : ref Wmsrv->Client
+{
+	# method 0 == allow room for kbd
+	# method 1 == fullscreen
+	activewindow := 0;
+	for(z := wmsrv->top(); z != nil; z = z.znext) {
+		if (z.id != 0 && z.id != 1 && z.id != 3) {
+			window := z.window(".");
+			if(window != nil) {
+				activewindow = 1;
+				break;
+			}
+		}
+	}
+	if(activewindow == 1) {
+		if(method == 0) {
+			resizeoverride = 1;
+			z.ctl <-= sys->sprint("!reshape . -1 0 0 %d %d", screen.image.r.dx(), screen.image.r.dy() - kbdheight);
+			z.ctl <-= "raise";
+		} else {
+			z.ctl <-= sys->sprint("!reshape . -1 0 0 %d %d", screen.image.r.dx(), screen.image.r.dy());
+		}
+		return z;
+	}
+	return nil;
+}
+
+updatewindowtable(winname : string)
+{
+	winnum := 0;
+	for(z := wmsrv->top(); z != nil; z = z.znext) {
+		winnum = winnum + 1;
+	}
+	winnow := 0;
+	while(winnow <= winnum) {
+		winnow = 0;
+		for(z = wmsrv->top(); z != nil; z = z.znext)
+			winnow = winnow + 1;
+	}
+	z = wmsrv->top();
+	windowtable[z.id] = winname;
+}
+
+ps()
+{
+	sys->print("----------------------------------------\n");
+	for(place := 0; windowtable[place] != nil; place = place + 1)
+		sys->print("%d == \"%s\"\n", place, windowtable[place]);
+	sys->sleep(5000);
+	ps();
 }
 
 strstr(s, t : string) : int

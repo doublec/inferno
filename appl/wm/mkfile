@@ -14,6 +14,7 @@ TARG=\
 	about.dis\
 	avi.dis\
 	bounce.dis\
+	brightness.dis\
 	brutus.dis\
 	c4.dis\
 	calendar.dis\

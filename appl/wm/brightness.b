@@ -1,4 +1,4 @@
-implement Windowbar;
+implement Brightness;
 include "sys.m";
 	sys: Sys;
 include "draw.m";
@@ -17,7 +17,7 @@ include "arg.m";
 
 myselfbuiltin: Shellbuiltin;
 
-Windowbar: module 
+Brightness: module 
 {
 	init:	fn(ctxt: ref Draw->Context, argv: list of string);
 	initbuiltin: fn(c: ref Context, sh: Sh): string;
@@ -36,7 +36,7 @@ screenr: Rect;
 
 badmodule(p: string)
 {
-	sys->fprint(sys->fildes(2), "windowbar: cannot load %s: %r\n", p);
+	sys->fprint(sys->fildes(2), "brightness: cannot load %s: %r\n", p);
 	raise "fail:bad module";
 }
 
@@ -76,7 +76,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	sys->bind("#s", "/chan", sys->MBEFORE);
 
 	arg->init(argv);
-	arg->setusage("windowbar [-s] [-p]");
+	arg->setusage("brightness [-s] [-p]");
 #	ownsnarf := (sys->open("/chan/snarf", Sys->ORDWR) == nil);
 	ownsnarf := sys->stat("/chan/snarf").t0 < 0;
 	while((c := arg->opt()) != 0){
@@ -93,17 +93,15 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	arg = nil;
 
 	if (ctxt == nil){
-		sys->fprint(sys->fildes(2), "windowbar: must run under a window manager\n");
+		sys->fprint(sys->fildes(2), "brightness: must run under a window manager\n");
 		raise "fail:no wm";
 	}
 
 	exec := chan of string;
-	task := chan of string;
 
-	tbtop = windowbar(ctxt, exec, task);
+	tbtop = brightness(ctxt, exec);
 	tkclient->startinput(tbtop, "ptr" :: "control" :: nil);
 	layout(tbtop);
-	spawn updatebattery(ctxt, tbtop, 1);
 
 	shctxt := Context.new(ctxt);
 	shctxt.addmodule("wm", myselfbuiltin);
@@ -133,22 +131,18 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		tk->pointer(tbtop, *m);
 	s := <-tbtop.ctxt.ctl or
 	s = <-tbtop.wreq =>
+		if(len s >= 8) {
+			if(s[:8] == "!reshape")
+				break;
+			if(s[:8] == "delete .")
+				s = "exit";
+		}
+		if(s == "task")
+			s = "exit";
 		wmctl(tbtop, s);
 	s := <-exec =>
-		# guard against parallel access to the shctxt environment
-		if (s != "batterystatus") {
-			if (donesetup){
-				{
- 					shctxt.run(ref Listnode(nil, s) :: nil, 0);
-				} exception {
-				"fail:*" =>	;
-				}
-			}
-		}
-		if (s == "batterystatus")
-			updatebattery(ctxt, tbtop, 0);
-	detask := <-task =>
-		deiconify(detask);
+		(nil, output) := sys->tokenize(s, " ");
+		setbrightness(hd tl output);
 	(off, data, nil, wc) := <-snarfIO.write =>
 		if(wc == nil)
 			break;
@@ -184,25 +178,13 @@ wmctl(top: ref Tk->Toplevel, c: string)
 	args := str->unquoted(c);
 	if(args == nil)
 		return;
-	n := len args;
-
 	case hd args{
-	"request" =>
-		# request clientid args...
-		if(n < 3)
-			return;
-		args = tl args;
-		clientid := hd args;
-		args = tl args;
-		err := handlerequest(clientid, args);
-		if(err != nil)
-			sys->fprint(sys->fildes(2), "windowbar: bad wmctl request %#q: %s\n", c, err);
 	"newclient" =>
 		# newclient id
 		;
 	"delclient" =>
 		# delclient id
-		deiconify(hd tl args);
+		;
 	"rect" =>
 		tkclient->wmctl(top, c);
 		layout(top);
@@ -211,96 +193,47 @@ wmctl(top: ref Tk->Toplevel, c: string)
 	}
 }
 
-handlerequest(clientid: string, args: list of string): string
-{
-	n := len args;
-	case hd args {
-	"task" =>
-		# task name
-		if(n != 2)
-			return "no task label given";
-		iconify(clientid, hd tl args);
-	"untask" or
-	"unhide" =>
-		deiconify(clientid);
-	* =>
-		return "unknown request";
-	}
-	return nil;
-}
-
-iconify(id, label: string)
-{
-	label = condenselabel(label);
-	e := tk->cmd(tbtop, "button .windowbar." +id+" -command {send task "+id+"} -takefocus 0");
-	cmd(tbtop, ".windowbar." +id+" configure -text '" + label);
-	if(e[0] != '!')
-		cmd(tbtop, "pack .windowbar."+id+" -side left -fill y");
-	cmd(tbtop, "update");
-}
-
-deiconify(id: string)
-{
-	e := tk->cmd(tbtop, "destroy .windowbar."+id);
-	if(e == nil){
-		tkclient->wmctl(tbtop, sys->sprint("ctl %q untask", id));
-		tkclient->wmctl(tbtop, sys->sprint("ctl %q kbdfocus 1", id));
-	}
-	cmd(tbtop, "update");
-}
-
 layout(top: ref Tk->Toplevel)
 {
 	r := top.screenr;
-	h := 64;
+	h := 56;
 	if(r.dy() < 480)
 		h = tk->rect(top, ".b", Tk->Border|Tk->Required).dy();
 	cmd(top, ". configure -x " + string r.min.x +
-			" -y " + string (r.max.y - h) +
+			" -y " + string (((r.max.y - r.min.y) / 2) - (h / 2)) +
 			" -width " + string r.dx() +
 			" -height " + string h);
 	cmd(top, "update");
 	tkclient->onscreen(tbtop, "exact");
 }
 
-windowbar(ctxt: ref Draw->Context, exec, task: chan of string): ref Tk->Toplevel
+brightness(ctxt: ref Draw->Context, exec : chan of string): ref Tk->Toplevel
 {
 	(tbtop, nil) = tkclient->toplevel(ctxt, nil, nil, Tkclient->Plain);
 	screenr = tbtop.screenr;
 
-	cmd(tbtop, "button .b -text {XXX}");
-	cmd(tbtop, "pack propagate . 0");
-
 	tk->namechan(tbtop, exec, "exec");
-	tk->namechan(tbtop, task, "task");
-	cmd(tbtop, "frame .windowbar");
-	batterylevel : ref Sys->FD;
-	batterylevel = sys->open("/dev/battery", sys->OREAD);
-	battery := array[5] of byte;
-	length := sys->read(batterylevel, battery, len battery);
-	battery = battery[:length];
-	level := string battery;
-	cmd(tbtop, "button .windowbar.battery -text " + string level + "% -borderwidth 0 -width 64 -height 64 -command {send exec batterystatus}");
-	cmd(tbtop, "pack .windowbar.battery -side left");
-	cmd(tbtop, "pack .windowbar -fill x");
+	cmd(tbtop, "frame .brightness");
+	brightness : ref Sys->FD;
+	brightness = sys->open("/dev/brightness", sys->OREAD);
+	brightnesslevel := array[5] of byte;
+	length := sys->read(brightness, brightnesslevel, len brightnesslevel);
+	brightnesslevel = brightnesslevel[:length];
+	level := string brightnesslevel;
+	cmd(tbtop, "scale .brightness.level -height 56 -width " + string screenr.dx() + " -from 5 -to 255 -orient horizontal -showvalue 1 -command {send exec updatebrightness}");
+	cmd(tbtop, ".brightness.level set " + level);
+	cmd(tbtop, "pack .brightness.level -side left");
+	cmd(tbtop, "pack .brightness -fill x");
 	return tbtop;
 }
 
-updatebattery(ctxt: ref Draw->Context, tbtop: ref Tk->Toplevel, wait: int)
+setbrightness(howmuch : string)
 {
-	batterylevel : ref Sys->FD;
-	batterylevel = sys->open("/dev/battery", sys->OREAD);
-	battery := array[5] of byte;
-	length := sys->read(batterylevel, battery, len battery);
-	battery = battery[:length];
-	level := string battery;
-	cmd(tbtop, ".windowbar.battery configure -text " + string level + "%");
-	cmd(tbtop, "update");
-	if (wait == 1) {
-		sys = load Sys Sys->PATH;
-		sys->sleep(60000);
-		updatebattery(ctxt, tbtop, 1);
-	}
+	brightnesslevel := array[5] of byte;
+	brightnesslevel = array of byte howmuch;
+	brightness : ref Sys->FD;
+	brightness = sys->open("/dev/brightness", sys->OWRITE);
+	sys->write(brightness, brightnesslevel, len brightnesslevel);
 }
 
 setup(shctxt: ref Context, finished: chan of int)
@@ -309,25 +242,6 @@ setup(shctxt: ref Context, finished: chan of int)
 	ctxt.run(shell->stringlist2list("run"::"/lib/wmsetup"::nil), 0);
 	cmd(tbtop, "update");
 	finished <-= 1;
-}
-
-condenselabel(label: string): string
-{
-	if(len label > 15){
-		new := "";
-		l := 0;
-		while(len label > 15 && l < 3) {
-			new += label[0:15]+"\n";
-			label = label[15:];
-			for(v := 0; v < len label; v++)
-				if(label[v] != ' ')
-					break;
-			label = label[v:];
-			l++;
-		}
-		label = new + label;
-	}
-	return label;
 }
 
 initbuiltin(ctxt: ref Context, nil: Sh): string

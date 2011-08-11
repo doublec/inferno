@@ -41,13 +41,19 @@ SPECFONT: con "/fonts/lucidasans/unicode.6.font";
 #KEYSIZE: con 13;
 #KEYSPACE: con 2;
 KEYSIZE: con 46;
-SPECIALKEYSIZE: con KEYSIZE * 3 / 2;
+SPECIALKEYSIZE: con 69;
 KEYHEIGHT: con 40;
 KEYSPACE: con 2;
 KEYBORDER: con 1;
 KEYGAP: con KEYSPACE - (2 * KEYBORDER);
 #ENDGAP: con 2 - KEYBORDER;
 ENDGAP: con 0;
+keysize: int;
+specialkeysize: int;
+space: int;
+
+tbtop: ref Tk->Toplevel;
+screenr: Rect;
 
 Key: adt {
 	name: string;
@@ -70,9 +76,7 @@ Return =>			Key("Enter", '\n', SPECIALKEYSIZE, nil, 0),
 Shift =>			Key("Shift", Keyboard->LShift, SPECIALKEYSIZE, nil, 0),
 Esc =>			Key("Esc", 8r33, KEYSIZE, nil, 0),
 Ctrl =>			Key("Ctrl", Keyboard->LCtrl, KEYSIZE, nil, 0),
-Alt =>			Key("Alt", Keyboard->LAlt, SPECIALKEYSIZE, nil, 0),
 Space =>			Key(" ", ' ', KEYSIZE * 4, nil, 0),
-Space+1 =>		Key("Return", '\n', SPECIALKEYSIZE, nil, 0),
 };
 
 keys:= array[] of {
@@ -89,11 +93,11 @@ keys:= array[] of {
 	# shifted
 	array[] of {
 		"Esc", "Tab", "\"",  "`", "\\{", "\\}", "_", "+", "<-", nil,
-		"@", "#", "$", "%", "^", "&", "*", "(", ")", "|", nil,
+		"!", "@", "#", "$", "%", "^", "&", "*", "(", ")", nil,
 		"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P",nil,
 		"A", "S", "D", "F", "G", "H", "J", "K", "L", ":", nil,
 		"Z", "X", "C", "V", "B", "N", "M", "<", ">", "?", nil,
-		"Caps", "Shift", " ", "Ctrl", "!", nil,
+		"Caps", "Shift", " ", "Ctrl", "|", nil,
 	},
 };
 
@@ -135,22 +139,40 @@ init(ctxt: ref Draw->Context, args: list of string)
 		array[len keys[0]] of int,
 		array[len keys[1]] of int,
 	};
+
+	(t, wcmd) := tkclient->toplevel(ctxt, "", "Kbd", 0);
+	cmd(t, ". configure -bd 0 -relief flat");
+
+	(tbtop, nil) = tkclient->toplevel(ctxt, nil, nil, Tkclient->Plain);
+	setwidth(tbtop);
+	
+	specials = array[] of {
+	Backspace =>		Key("<-", '\b', specialkeysize, nil, 0),
+	Tab =>			Key("Tab", '\t', specialkeysize, nil, 0),
+	Backslash =>		Key("\\\\", '\\', keysize, nil, 0),
+	CapsLock =>		Key("Caps", Keyboard->Caps, keysize, nil, 0),
+	Return =>		Key("Enter", '\n', specialkeysize, nil, 0),
+	Shift =>		Key("Shift", Keyboard->LShift, specialkeysize, nil, 0),
+	Esc =>			Key("Esc", 8r33, keysize, nil, 0),
+	Ctrl =>			Key("Ctrl", Keyboard->LCtrl, keysize, nil, 0),
+	Alt =>			Key("Alt", Keyboard->LAlt, specialkeysize, nil, 0),
+	Space =>			Key(" ", ' ', space, nil, 0),
+	Space+1 =>		Key("Return", '\n', specialkeysize, nil, 0),
+	};
+
 	setindex(keys[0], keyvals[0], specials);
 	setindex(keys[1], keyvals[1], specials);
-
-
-	(t, wcmd) := tkclient->toplevel(ctxt, "", "Kbd", winopts);
-	cmd(t, ". configure -bd 0 -relief flat");
 
 	for(i := 0; i < len keys[0]; i++)
 		if(keys[0][i] != nil)
 			cmd(t, sys->sprint("button .b%d -takefocus 0 -font %s -width %d -height %d -bd %d -activebackground %s -text {%s} -command 'send keypress %d",
-				i, FONT, KEYSIZE, KEYHEIGHT, KEYBORDER, background, keys[0][i], keyvals[0][i]));
+				i, FONT, keysize, KEYHEIGHT, KEYBORDER, background, keys[0][i], keyvals[0][i]));
 
 	for(i = 0; i < len specials; i++) {
 		k := specials[i];
-		for(xl := k.x; xl != nil; xl = tl xl)
+		for(xl := k.x; xl != nil; xl = tl xl) {
 			cmd(t, sys->sprint(".b%d configure -font %s -width %d", hd xl, SPECFONT, k.size));
+		}
 	}
 
 	# pack buttons in rows
@@ -190,10 +212,20 @@ init(ctxt: ref Draw->Context, args: list of string)
 	r := t.screenr;
 	off := (r.dx()-w)/2;
 	cmd(t, sys->sprint(". configure -x %d -y %d", r.min.x+off, r.max.y-h));
-	tkclient->onscreen(t, nil);
+	tkclient->onscreen(t, "onscreen");
 	tkclient->startinput(t, "ptr" :: nil);
 
 	spawn handle_keyclicks(t, wcmd, taskbar);
+}
+
+setwidth(top: ref Tk->Toplevel)
+{
+
+	r := top.screenr;
+	keysize = (r.dx() - 9) / 10;
+	specialkeysize = keysize * 3 / 2;
+	space = keysize * 4;
+
 }
 
 setindex(keys: array of string, keyvals: array of int, spec: array of Key)
