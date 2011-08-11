@@ -27,6 +27,7 @@ extern Dev pointerdevtab;
 extern Dev ipdevtab;
 extern Dev eiadevtab;
 extern Dev memdevtab;
+extern Dev phonedevtab;
 Dev* devtab[]={
 	&rootdevtab,
 	&consdevtab,
@@ -47,7 +48,7 @@ Dev* devtab[]={
 	&ipdevtab,
 	&eiadevtab,
 	&memdevtab,
-	nil,
+	&phonedevtab,
 	nil,
 	nil,
 	nil,

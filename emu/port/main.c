@@ -374,6 +374,9 @@ emuinit(void *imod)
 	kbind("#p", "/prog", MREPL);
 	kbind("#d", "/fd", MREPL);
 	kbind("#I", "/net", MAFTER);	/* will fail on Plan 9 */
+#ifdef ANDROID
+	kbind("#f", "/phone", MBEFORE|MCREATE);
+#endif
 
 	/* BUG: we actually only need to do these on Plan 9 */
 	kbind("#U/dev", "/dev", MAFTER);
