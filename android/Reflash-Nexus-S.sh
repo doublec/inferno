@@ -14,12 +14,12 @@ adb pull /data/boot.img work/boot.img
 
 echo Pushing the startup script
 adb shell "mount -o remount,rw /system"
-adb push ./inferno-s.sh /system/bin/inferno-s.sh
+adb push ./inferno-s.sh /system/bin/inferno.sh
 
 echo Unpacking, modifying, and repacking the boot image
 cd work
 ../unpack-bootimg.pl boot.img
-cp ../init.rc-s boot.img-ramdisk/init.rc
+cp ../init.rc boot.img-ramdisk/init.rc
 ../repack-bootimg.pl boot.img-kernel.gz boot.img-ramdisk boot-inferno.img
 
 echo Rebooting into the bootloader
