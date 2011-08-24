@@ -1,15 +1,13 @@
 /* TODO/BUGS in no order:
-   SMSes will be acknowledged regardless of whether anyone happens to be reading /phone/sms to see them, potentially losing SMSes if no one reads them before shutdown
-   translation from UTF-8 to GSM for sending SMSes
+   should send acknowledgement when an sms is read from /phone/sms, not just on every read
    decode_sms is sloppy--should convert septets into octets, then convert octets into UTF-8 instead of trying to do it all at once. split off into separate functions?
    handle sending/receiving multiple text messages and checking length of messages sent to /phone/sms
    consider notifying RIL of screen state using RIL_REQUEST_SCREEN_STATE to conserve power
-   figure out why default SMSC address for send_sms does not work
-   too many assumptions made in phonewrite() about what the user sends
    too many assumptions made in loop_for_data() about read() giving exactly the right amount of data
-   some of the created files will not be consistent across multiple read()s, i.e. if you read a few bytes of data, wait, then read a few more, the result may not make sense if things change in between. E.g. you may get "onf" if you read from /phone/ctl during a on/off transition
    parcel code will go crazy if ints overflow
    no way to give an error if SMSes don't send
+   need to support DTMF
+   get calling number when ring event occurs (through CALL_STATE_CHANGED?)
 */
 
 #include "dat.h"
@@ -30,11 +28,56 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <semaphore.h>
+#include <dlfcn.h>
+#include "asound.h"
+#include "alsa_audio.h"
+// tmp
+#include <linux/ioctl.h>
+#define __force
+#define __bitwise
+#define __user
+#define AUDITCHECK 
+//end tmp
+
+// audio stuff taken from android source
+#define AUDIO_HW_OUT_PERIOD_MULT 8 // (8 * 128 = 1024 frames)
+#define AUDIO_HW_OUT_PERIOD_SZ (PCM_PERIOD_SZ_MIN * AUDIO_HW_OUT_PERIOD_MULT)
+#define AUDIO_HW_OUT_PERIOD_CNT 4
+// RIL-related definitions
 
 #define RESPONSE_SOLICITED 0
 #define RESPONSE_UNSOLICITED 1
 #define POWER_ON 2000
 #define POWER_OFF 2001
+
+struct RilClient {
+    void *prv;
+};
+
+typedef struct RilClient * HRilClient;
+
+typedef enum _SoundType {
+    SOUND_TYPE_VOICE,
+    SOUND_TYPE_SPEAKER,
+    SOUND_TYPE_HEADSET,
+    SOUND_TYPE_BTVOICE
+} SoundType;
+
+typedef enum _AudioPath {
+    SOUND_AUDIO_PATH_HANDSET,
+    SOUND_AUDIO_PATH_HEADSET,
+    SOUND_AUDIO_PATH_SPEAKER,
+    SOUND_AUDIO_PATH_BLUETOOTH,
+    SOUND_AUDIO_PATH_BLUETOOTH_NO_NR,
+    SOUND_AUDIO_PATH_HEADPHONE
+} AudioPath;
+
+typedef enum _SoundClockCondition {
+    SOUND_CLOCK_STOP,
+    SOUND_CLOCK_START
+} SoundClockCondition;
+
+// Inferno-related globals
 
 enum
 {
@@ -43,17 +86,19 @@ enum
 	Qsms,
 	Qphone,
 	Qsignal,
-	Qstatus
+	Qstatus,
+	Qcalls
 };
 
 Dirtab phonetab[] =
 {
-	".",      {Qdir, 0, QTDIR}, 0, DMDIR|0555,
-	"ctl",    {Qctl},           0, 0666,
-	"sms",    {Qsms},           0, 0666,
-	"phone",  {Qphone},         0, 0666,
-	"signal", {Qsignal},        0, 0666,
-	"status", {Qstatus},        0, 0666,
+	".",	  {Qdir, 0, QTDIR}, 0, DMDIR|0555,
+	"ctl",	  {Qctl},	    0, 0666,
+	"sms",	  {Qsms},	    0, 0666,
+	"phone",  {Qphone},	    0, 0666,
+	"signal", {Qsignal},	    0, 0666,
+	"status", {Qstatus},	    0, 0666,
+	"calls",  {Qcalls},	    0, 0666,
 };
 
 Queue *phoneq;
@@ -62,22 +107,53 @@ Queue *smsq;
 static int signal_strength;
 static int fd;
 static int power_state = 0;
-
 static struct {
 	sem_t sem;
 	char *msg;
 } status_msg;
 
+static struct {
+	RWLock l;
+	RIL_Call *cs;
+	int num;
+} calls;
+
+/* RIL client library globals */
+static void *ril_client_handle;
+static HRilClient ril_client = NULL;
+HRilClient (*openClientRILD)(void);
+int (*disconnectRILD)(HRilClient);
+int (*closeClientRILD)(HRilClient);
+int (*isConnectedRILD)(HRilClient);
+int (*connectRILD)(HRilClient);
+int (*setCallVolume)(HRilClient, SoundType, int);
+int (*setCallAudioPath)(HRilClient, AudioPath);
+int (*setCallClockSync)(HRilClient, SoundClockCondition);
+
+
 void loop_for_data(void *v);
 void send_sms(char *smsc_pdu, char *pdu);
-char *encode_sms(char *dest, char *msg);
+char *encode_sms(char *destnum, Rune *runemsg);
 void dial(char *number);
 void activate_net(void);
 void deactivate_net(void);
 void radio_power(int power);
+int rune_to_gsm(Rune r, char *out);
+
+void *auditmalloc(size_t orig);
+void auditfree(void *p);
+void auditmixer_close(struct mixer *mixer);
+struct mixer *auditmixer_open(void);
+void *auditcalloc(size_t nmemb, size_t size);
+char *auditstrdup(char *str);
+void *auditrealloc(void *p, size_t size);
 
 void phoneinit(void)
 {
+	calls.cs = NULL;
+	calls.num = 0;
+	memset(&calls.l, 0, sizeof(RWLock));
+
 	phoneq = qopen(512, 0, nil, nil);
 	if(phoneq == 0)
 		panic("no memory");
@@ -101,6 +177,7 @@ void phoneinit(void)
 	if(fd == -1) {
 		perror("socket_local_client failed");
 	}
+	// set privileges back to root/root
 	if(seteuid(0) == -1) {
 		perror("seteuid(0) failed");
 	}
@@ -108,6 +185,28 @@ void phoneinit(void)
 		perror("setegid(0) failed");
 	}
 	kproc("phone", loop_for_data, 0, 0);
+	// Load RIL client functions, used for setting call volume, etc
+	ril_client_handle = dlopen("libsecril-client.so", RTLD_NOW);
+	if(ril_client_handle == NULL) {
+		fprintf(stderr, "opening libsecril-client.so failed: %s\n",
+			dlerror());
+	}
+	openClientRILD = dlsym(ril_client_handle, "OpenClient_RILD");
+	disconnectRILD = dlsym(ril_client_handle, "Disconnect_RILD");
+	closeClientRILD = dlsym(ril_client_handle, "CloseClient_RILD");
+	isConnectedRILD = dlsym(ril_client_handle, "isConnected_RILD");
+	connectRILD = dlsym(ril_client_handle, "Connect_RILD");
+	setCallVolume = dlsym(ril_client_handle, "SetCallVolume");
+	setCallAudioPath = dlsym(ril_client_handle, "SetCallAudioPath");
+	setCallClockSync = dlsym(ril_client_handle, "SetCallClockSync");
+
+	ril_client = openClientRILD();
+	if(ril_client == NULL) {
+		fprintf(stderr, "error in openClientRILD()\n");
+	}
+	if(connectRILD(ril_client) != 0) {
+		fprintf(stderr, "error while attempting to connectRILD()\n");
+	}
 }
 
 static Chan *phoneattach(char *spec)
@@ -134,6 +233,9 @@ static Chan *phoneopen(Chan *c, int omode)
 	case Qstatus:
 		get_reg_state();
 		break;
+	case Qcalls:
+		get_current_calls();
+		break;
 	}
 
 	return c;
@@ -158,7 +260,7 @@ static long phoneread(Chan *c, void *va, long n, vlong offset)
 	case Qphone:
 		return qread(phoneq, va, n);
 	case Qsms:
-		
+		// FIXME only acknowledge when an SMS is being read
 		acknowledge_sms();
 		return qread(smsq, va, n);
 	case Qsignal:
@@ -172,6 +274,8 @@ static long phoneread(Chan *c, void *va, long n, vlong offset)
 		}
 		// FIXME lock
 		return readstr(offset, va, n, status_msg.msg);
+	case Qcalls:
+		return readstr(offset, va, n, "fixme\n");
 	}
 	return 0;
 }
@@ -179,56 +283,76 @@ static long phoneread(Chan *c, void *va, long n, vlong offset)
 static long phonewrite(Chan *c, void *va, long n, vlong offset)
 {
 	char *pdu;
-	char *split;
+	char *args[5];
+	char *str;
+	Rune *runestr;
+	int nargs = 0, i, j;
 
 	if(c->qid.type & QTDIR)
 		error(Eperm);
 	switch((ulong) c->qid.path) {
 	case Qctl:
-		((char *)va)[n] = '\0';
-		printf("Qctl: va = %s\n", va);
-		((char *) va)[strlen(va) - 1] = '\0'; // get rid of newline
-		if(strcmp(va, "on") == 0) {
+		str = auditmalloc((n + 1) * sizeof(char));
+		strncpy(str, va, n);
+		str[n] = '\0';
+		printf("Qctl: va = %s\n", str);
+		nargs = getfields(str, args, sizeof(args), 1, " \n");
+		if(strcmp(args[0], "on") == 0) {
 			radio_power(1);
-		} else if(strcmp(va, "off") == 0) {
+		} else if(strcmp(args[0], "off") == 0) {
 			radio_power(0);
-		} else if(strcmp(va, "net on") == 0) {
-			activate_net();
-		} else if(strcmp(va, "net off") == 0) {
-			deactivate_net();
+		} else if(strcmp(args[0], "net") == 0) {
+			if(nargs != 2) {
+				break;
+			}
+			if(strcmp(args[1], "on") == 0) {
+				activate_net();
+			} else if(strcmp(args[1], "off") == 0) {
+				deactivate_net();
+			}
 		}
+		auditfree(str);
 		break;
 	case Qsms:
-		printf("Qsms: got %d bytes\n", n);
-		((char *)va)[n] = '\0';
-		printf("Qsms: va = %s\n", va);
-		((char *) va)[strlen(va) - 1] = '\0'; // get rid of newline
-		split = strstr(va, ":");
-		if(split == NULL) break;
-		*split = '\0';
-		split++;
-
-		printf("dest = %s msg = %s\n", va, split);
-		pdu = encode_sms(va, split);
-		printf("pdu = %s\n", pdu);
-		send_sms("07912180958729f4", pdu);
-		free(pdu);
+		str = auditmalloc((n + 1) * sizeof(char));
+		strncpy(str, va, n);
+		str[n] = '\0';
+		printf("Qsms: va = %s\n", str);
+		nargs = getfields(str, args, 3, 1, " ");
+		if(strcmp(args[0], "send") == 0) {
+			if(nargs != 3) {
+				break;
+			}
+			runestr = auditmalloc((utflen(args[2]) + 1) * sizeof(Rune));
+			for(i = 0, j = 0; j < strlen(args[2]); i++) {
+				j += chartorune(runestr + i, args[2] + j);
+			}
+			runestr[i] = 0;
+			pdu = encode_sms(args[1], runestr);
+			send_sms(NULL, pdu);
+			
+			auditfree(str);
+			auditfree(runestr);
+			auditfree(pdu);
+		}
 		break;
 	case Qphone:
-		((char  *)va)[n] = '\0';
-		printf("Qphone: va = %s\n", va);
-		((char *) va)[strlen(va) - 1] = '\0'; // get rid of newline
-		if(strncmp(va, "answer", 6) == 0) {
+		str = auditmalloc((n + 1) * sizeof(char));
+		strncpy(str, va, n);
+		str[n] = '\0';
+		printf("Qphone: va = %s\n", str);
+		nargs = getfields(str, args, sizeof(args), 1, " \n");
+		if(strcmp(args[0], "answer") == 0) {
 			answer();
 			return n;
-		} else if(strncmp(va, "dial", 4)) {
-			split = strstr(va, " ");
-			if(split == NULL) break;
-			*split = '\0';
-			split++;
-			
-			dial(va);
+		} else if(strcmp(args[0], "dial") == 0) {
+			if(nargs != 2) {
+				fprintf(stderr, "malformed dial request\n");
+				break;
+			}
+			dial(args[1]);
 		}
+		auditfree(str);
 		break;
 	}
 	return n;
@@ -265,7 +389,7 @@ struct parcel {
 
 int parcel_init(struct parcel *p)
 {
-	p->data = malloc(sizeof(int32_t)); // arbitrary size to start with
+	p->data = auditmalloc(sizeof(int32_t)); // arbitrary size to start with
 	if(p->data == NULL) return -1;
 	p->size = 0;
 	p->capacity = sizeof(int32_t);
@@ -275,7 +399,7 @@ int parcel_init(struct parcel *p)
 
 int parcel_grow(struct parcel *p, size_t size)
 {
-	char *new = realloc(p->data, p->capacity + size);
+	char *new = auditrealloc(p->data, p->capacity + size);
 
 	if(new == NULL) {
 		return -1;
@@ -287,7 +411,7 @@ int parcel_grow(struct parcel *p, size_t size)
 
 void parcel_free(struct parcel *p)
 {
-	free(p->data);
+	auditfree(p->data);
 	p->size = 0;
 	p->capacity = 0;
 	p->offset = 0;
@@ -304,8 +428,8 @@ int32_t parcel_r_int32(struct parcel *p)
 int parcel_w_int32(struct parcel *p, int32_t val)
 {
 	for(;;) {
-		/*printf("parcel_w_int32(%d): offset = %d, cap = %d, size = %d\n",
-		  val, p->offset, p->capacity, p->size);*/
+/*		printf("parcel_w_int32(%d): offset = %d, cap = %d, size = %d\n",
+		val, p->offset, p->capacity, p->size);*/
 		if(p->offset + sizeof(int32_t) < p->capacity) {
 			// There's enough space
 			*((int32_t *) (p->data + p->offset)) = val;
@@ -332,10 +456,8 @@ int parcel_w_string(struct parcel *p, char *str)
 		parcel_w_int32(p, -1);
 		return 0;
 	}
-	// we have to avoid strdup8to16 here because inferno doesn't like us
-	// free()ing the memory that strdup8to16 creates. 
 	s16_len = strlen8to16(str);
-	s16 = malloc(sizeof(char16_t) * s16_len);
+	s16 = auditmalloc(sizeof(char16_t) * s16_len);
 	strcpy8to16(s16, str, &s16_len);
 	if(parcel_w_int32(p, s16_len) == -1) {
 		return -1;
@@ -371,21 +493,26 @@ int parcel_w_string(struct parcel *p, char *str)
 		} else {
 			// Grow data and retry
 			if(parcel_grow(p, padded) == -1) {
-				free(s16);
+				auditfree(s16);
 				return -1;
 			}
 		}
 	}
-	free(s16);
+	auditfree(s16);
 	return 0;
 }
 
 char *parcel_r_string(struct parcel *p)
 {
 	char *ret;
-	int len = parcel_r_int32(p);
-	ret = strndup16to8((char16_t *) (p->data + p->offset), len);
-	p->offset += PAD_SIZE((len + 1) * sizeof(char16_t));
+	int len16 = parcel_r_int32(p);
+	size_t len8;
+	if(len16 < 0) return NULL; // this is how a null string is sent
+	len8 = strnlen16to8((char16_t *) (p->data + p->offset), len16);
+	ret = auditmalloc(len8 + 1);
+	if(ret == NULL) return NULL;
+	strncpy16to8(ret, (char16_t *) (p->data + p->offset), len16);
+	p->offset += PAD_SIZE((len16 + 1) * sizeof(char16_t));
 	return ret;
 }
 
@@ -480,7 +607,66 @@ int gsm_to_utf8(char gsm, char *out)
 	case 127: out[0] = 0xC3; out[1] = 0xA0; return 2; // à
 	default: *out = gsm; return 1;
 	}
-        *out = 'a'; printf("out = %02x\n", *out); return 1;
+}
+
+// Unicode to GSM SMS format, returns number of bytes written to out
+int rune_to_gsm(Rune r, char *out)
+{
+	switch(r) {
+	case L'@': *out = 0; return 1;
+	case L'£': *out = 1; return 1;
+	case L'$': *out = 2; return 1;
+	case L'¥': *out = 3; return 1;
+	case L'è': *out = 4; return 1;
+	case L'é': *out = 5; return 1;
+	case L'ù': *out = 6; return 1;
+	case L'ì': *out = 7; return 1;
+	case L'ò': *out = 8; return 1;
+	case L'Ç': *out = 9; return 1;
+	case L'Ø': *out = 11; return 1;
+	case L'ø': *out = 12; return 1;
+	case L'Å': *out = 14; return 1;
+	case L'å': *out = 15; return 1;
+	case L'Δ': *out = 16; return 1;
+	case L'_': *out = 17; return 1;
+	case L'Φ': *out = 18; return 1;
+	case L'Γ': *out = 19; return 1;
+	case L'Λ': *out = 20; return 1;
+	case L'Ω': *out = 21; return 1;
+	case L'Π': *out = 22; return 1;
+	case L'Ψ': *out = 23; return 1;
+	case L'Σ': *out = 24; return 1;
+	case L'Θ': *out = 25; return 1;
+	case L'Ξ': *out = 26; return 1;
+	case L'\f': out[0] = 27; out[1] = 10; return 2;
+	case L'^': out[0] = 27; out[1] = 20; return 2;
+	case L'{': out[0] = 27; out[1] = 40; return 2;
+	case L'}': out[0] = 27; out[1] = 41; return 2;
+	case L'\\': out[0] = 27; out[1] = 47; return 2;
+	case L'[': out[0] = 27; out[1] = 60; return 2;
+	case L'~': out[0] = 27; out[1] = 61; return 2;
+	case L']': out[0] = 27; out[1] = 62; return 2;
+	case L'|': out[0] = 27; out[1] = 64; return 2;
+	case L'€': out[0] = 27; out[1] = 101; return 2;
+	case L'Æ': *out = 28; return 1;
+	case L'æ': *out = 29; return 1;
+	case L'ß': *out = 30; return 1;
+	case L'É': *out = 31; return 1;
+	case L'¤': *out = 36; return 1;
+	case L'¡': *out = 64; return 1;
+	case L'Ä': *out = 91; return 1;
+	case L'Ö': *out = 92; return 1;
+	case L'Ñ': *out = 93; return 1;
+	case L'Ü': *out = 94; return 1;
+	case L'§': *out = 95; return 1;
+	case L'¿': *out = 96; return 1;
+	case L'ä': *out = 123; return 1;
+	case L'ö': *out = 124; return 1;
+	case L'ñ': *out = 125; return 1;
+	case L'ü': *out = 126; return 1;
+	case L'à': *out = 127; return 1;
+	default: *out = r; return 1;
+	}
 }
 
 char *hexify(char *bytes, size_t len)
@@ -489,17 +675,17 @@ char *hexify(char *bytes, size_t len)
 	int i, j;
 	char *ret;
 	for(i = 0; i < 256; i++) {
-		hexarray[i] = (char *) malloc(3 * sizeof(char));
+		hexarray[i] = (char *) auditmalloc(3 * sizeof(char));
 		snprintf(hexarray[i], 3, "%02x", i);
 	}
-	ret = (char *) malloc((len * 2 + 1) * sizeof(char));
+	ret = (char *) auditmalloc((len * 2 + 1) * sizeof(char));
 	for(i = 0, j = 0; i < len; i++, j += 2) {
 		ret[j] = hexarray[(unsigned char) bytes[i]][0];
 		ret[j + 1] = hexarray[(unsigned char) bytes[i]][1];
 	}
 	ret[j] = '\0';
 	for(i = 0; i < 256; i++) {
-		free(hexarray[i]);
+		auditfree(hexarray[i]);
 	}
 	return ret;
 }
@@ -520,9 +706,9 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 		fprintf(stderr, "malformed hex string passed to decode_sms\n");
 		return -1;
 	}
-	bytes = (char **) malloc((len / 2) * sizeof(char *));
+	bytes = (char **) auditmalloc((len / 2) * sizeof(char *));
 	for(i = 0; i < len / 2; i++) {
-		bytes[i] = (char *) malloc(3 * sizeof(char));
+		bytes[i] = (char *) auditmalloc(3 * sizeof(char));
 		bytes[i][0] = hexstr[i * 2];
 		bytes[i][1] = hexstr[i * 2 + 1];
 		bytes[i][2] = '\0';
@@ -534,8 +720,7 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 		fprintf(stderr, "unsupported number format for sender: %s",
 			bytes[1]);
 	}
-	service_center = (char *) malloc((smsc_len + 2) * sizeof(char));
-	service_center[0] = '\0';
+	service_center = auditmalloc((smsc_len*2 + 2) * sizeof(char));
 	for(i = 2, j = 0; i < smsc_len + 1; i++, j += 2) {
 		// number is nibble-swapped
 		service_center[j] = bytes[i][1];
@@ -551,7 +736,7 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 
 	// next, decode the sender's number
 	src_len = strtol(bytes[curpos + 1], NULL, 16);
-	src_num = (char *) malloc((src_len + 2) * sizeof(char));
+	src_num = (char *) auditmalloc((src_len + 2) * sizeof(char));
 	// convert src_len from # of digits to # of bytes
 	src_len = (src_len % 2 == 0) ? src_len : src_len + 1;
 	src_len = src_len / 2;
@@ -575,7 +760,7 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 	// Timestamp
 	// TODO: may want to convert this to a time_t value as well
 	
-	timestamp = (char *) malloc(15 * sizeof(char));
+	timestamp = (char *) auditmalloc(15 * sizeof(char));
 	for(i = curpos + 2, j = 0; i < curpos + 9; i++, j += 2) {
 		// number is nibble-swapped
 		timestamp[j] = bytes[i][1];
@@ -591,32 +776,9 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 	for(i = curpos + 1, j = 0; i < len / 2, j < msg_len; i++, j++) {
 		msgbytes[j] = strtol(bytes[i], NULL, 16);
 	}
-	// Calculate the # of UTF-8 bytes the message will take up by
-	// doing a first pass with gsm_to_ascii - this is terrible and could 
-	// probably be done in a better way. FIXME
-/*	oldbits = 0;
-	numoldbits = 0;
-	for(i = 0, j = 0; i < msg_len; i++) {
-		int numbits = (i % 7) + 1;
-		int newbits;
-		char garbage[4];
-		newbits = msgbytes[i] >> (8 - numbits);
-		newbits &= (1 << numbits) - 1;
-		msgbytes[i] = msgbytes[i] & ((1 << (8 - numbits)) - 1);
-		msgbytes[i] = msgbytes[i] << numoldbits;
-		// repurpose gsm_to_utf8 to just give us the length. bad
-		utf8msglen += gsm_to_utf8(((msgbytes[i] & ((1 << (8 - numbits)) - 1)) << numoldbits) | oldbits, garbage);
-		if(numbits == 7) {
-			utf8msglen += gsm_to_utf8(newbits, garbage);
-			newbits = 0;
-			numbits = 0;
-		}
-		oldbits = newbits;
-		numoldbits = numbits;
-	}
-	printf("calculated utf8msglen = %d\n", utf8msglen);
-*/	utf8msglen = 400;
-	msg = (char *) malloc((utf8msglen + 1) * sizeof(char));
+	// FIXME?
+	utf8msglen = UTFmax*161;
+	msg = (char *) auditmalloc((utf8msglen + 1) * sizeof(char));
 
 	// convert message to UTF-8
 	oldbits = 0;
@@ -643,22 +805,22 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 	sms->msg = msg;
 	// cleanup
 	for(i = 0; i < len / 2; i++) {
-		free(bytes[i]);
+		auditfree(bytes[i]);
 	}
-	free(bytes);
+	auditfree(bytes);
 	return 0;
 }
 
-char *encode_sms(char *destnum, char *msg)
+char *encode_sms(char *destnum, Rune *runemsg)
 {
 	int i, j, actual_dest_len, enc_msg_len, ret_len;
 	char dest_len[3];
 	char *dest;
-	char *enc_msg, *final_msg, *ret;
+	char *enc_msg, *final_msg, *ret, *msg;
 	// dest_len is the hex representation of the length of the phone #
 	snprintf(dest_len, 3, "%02x", strlen(destnum));
 	actual_dest_len = (strlen(destnum) % 2 == 0) ? strlen(destnum) : strlen(destnum) + 1;
-	dest = (char *) malloc((actual_dest_len + 1) * sizeof(char));
+	dest = (char *) auditmalloc((actual_dest_len + 1) * sizeof(char));
 	for(i = 0; i < actual_dest_len; i += 2) {
 		if(destnum[i + 1] != '\0') {
 			dest[i] = destnum[i + 1];
@@ -669,8 +831,17 @@ char *encode_sms(char *destnum, char *msg)
 	}
 	dest[i] = '\0';
 //	printf("dest = %s\n", dest);
+
+	msg = auditmalloc(UTFmax * (runestrlen(runemsg) + 1) * sizeof(char));
+	for(i = 0, j = 0; i < runestrlen(runemsg); i++) {
+		j += rune_to_gsm(runemsg[i], msg + j);
+	}
+	msg[j] = '\0';
+	for(i = 0; i < strlen(msg); i++) {
+		printf("%02x\n", msg[i]);
+	}
 	enc_msg_len = strlen(msg) - (strlen(msg) / 8);
-	enc_msg = (char *) malloc((enc_msg_len + 1) * sizeof(char));
+	enc_msg = (char *) auditmalloc((enc_msg_len + 1) * sizeof(char));
 	for(i = 0, j = 0; i < strlen(msg); i++, j++) {
 		int numbits = (i + 1) % 8;
 		char bits;
@@ -683,40 +854,48 @@ char *encode_sms(char *destnum, char *msg)
 //			printf("once shifted by %d: %hhx\n", numbits, enc_msg[j]);
 		enc_msg[j] = enc_msg[j] | (bits << (8 - numbits));
 //			printf("bits << (8 - numbits) %hhx\n", bits << (8 - numbits));
-//		printf("%hhx\n", enc_msg[j]);
-		fflush(stdout);
 	}
 	final_msg = hexify(enc_msg, enc_msg_len);
 	ret_len = 14 + strlen(dest) + strlen(final_msg);
-	ret = (char *) malloc((ret_len + 1) * sizeof(char));
+	ret = (char *) auditmalloc((ret_len + 1) * sizeof(char));
 	// FIXME: too much of the sent msg is hardcoded
 	snprintf(ret, ret_len + 1, "0120%s91%s0000%02x%s", dest_len, dest, strlen(msg), final_msg);
-//	printf("%s\n", ret);
-	free(enc_msg);
-	free(final_msg);
-	free(dest);
+	auditfree(enc_msg);
+	auditfree(final_msg);
+	auditfree(dest);
 	return ret;
 }
 
 /* functions that actually belong here */
 
+void handle_error(int seq, int error)
+{
+	// RIL error messages
+	char *errmsgs[] = { "no error", "radio not available", "generic failure", "password incorrect", "need SIM PIN2", "need SIM PUK2", "request not supported", "cancelled", "cannot access network during voice calls", "cannot access network before registering to network", "retry sending sms", "no SIM", "no subscription", "mode not supported", "FDN list check failed", "illegal SIM or ME" };
+	char *errmsg = errmsgs[error];
+	switch(seq) {
+	case RIL_REQUEST_SEND_SMS:
+		qproduce(smsq, errmsg, strlen(errmsg));
+		break;
+	}
+}
+
 void interpret_sol_response(struct parcel *p)
 {
-	int seq, error, i, numstr, offset = 0;
+	int seq, error, i, num, offset = 0;
 	char buf[200];
 	seq = parcel_r_int32(p);
 	error = parcel_r_int32(p);
-	printf("solicited: seq = %d error = %d\n", seq, error);
-	printf("%d bytes left\n", parcel_data_avail(p));
+	printf("received sol response: seq: %d err: %d\n", seq, error);
 	if(error != 0) {
+		handle_error(seq, error);
 		return;
 	}
 	switch(seq) {
 	case RIL_REQUEST_SETUP_DATA_CALL:
 		if(!parcel_data_avail(p)) return;
-		numstr = parcel_r_int32(p);
-		printf("numstr = %d\n", numstr);
-		for(i = 0; i < numstr; i++) {
+		num = parcel_r_int32(p);
+		for(i = 0; i < num; i++) {
 			printf("%s\n", parcel_r_string(p));
 		}
 		break;
@@ -728,15 +907,96 @@ void interpret_sol_response(struct parcel *p)
 		break;
 	case RIL_REQUEST_REGISTRATION_STATE:
 		if(!parcel_data_avail(p)) return;
-		numstr = parcel_r_int32(p);
+		num = parcel_r_int32(p);
 		offset = 0;
-		for(i = 0; i < numstr; i++) {
+		for(i = 0; i < num; i++) {
 			offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", parcel_r_string(p));
 		}
 		// FIXME lock
-		free(status_msg.msg);
-		status_msg.msg = strdup(buf);
+		auditfree(status_msg.msg);
+		status_msg.msg = auditstrdup(buf);
 		sem_post(&status_msg.sem);
+		break;
+	case RIL_REQUEST_DIAL:
+//		setCallClockSync(ril_client, SOUND_CLOCK_START);
+		printf("setcallvolume returned %d\n",
+		       setCallVolume(ril_client, SOUND_TYPE_VOICE, 4));
+		printf("setcallaudiopath returned %d\n", setCallAudioPath(ril_client, SOUND_AUDIO_PATH_HANDSET));
+		printf("setcallvolume returned %d\n",
+		       setCallVolume(ril_client, SOUND_TYPE_VOICE, 4));
+		printf("got RIL_REQUEST_DIAL success\n");
+		set_mute(0);
+//		setCallClockSync(ril_client, SOUND_CLOCK_START);
+		break;
+	case RIL_REQUEST_GET_CURRENT_CALLS:
+		// DEBUG
+		printf("current pos: %d\n", p->offset);
+		for(i = 0; i < p->size; i++) {
+			printf("%02x ", p->data[i]);
+		}
+		printf("\n");
+
+		if(!parcel_data_avail(p)) {
+			break;
+		}
+
+		wlock(&calls.l);
+		printf("before free\n");
+		for(i = 0; i < calls.num; i++) {
+			printf("freeing number\n");
+			auditfree(calls.cs[i].number);
+			printf("freeing name\n");
+			auditfree(calls.cs[i].name);
+			printf("freeing uusInfo\n");
+			auditfree(calls.cs[i].uusInfo);
+		}
+		auditfree(calls.cs);
+		printf("after free\n");
+		num = parcel_r_int32(p);
+		printf("after read\n");
+		calls.num = num;
+		calls.cs = auditmalloc(num * sizeof(RIL_Call));
+		printf("got past malloc\n");
+		if(calls.cs == NULL) {
+			wunlock(&calls.l);
+			fprintf(stderr, "malloc failed while making %d RIL_Calls\n", num);
+			break;
+		}
+
+		for(i = 0; i < num; i++) {
+			calls.cs[i].state = parcel_r_int32(p);
+			calls.cs[i].index = parcel_r_int32(p);
+			calls.cs[i].toa = parcel_r_int32(p);
+			calls.cs[i].isMpty = parcel_r_int32(p);
+			calls.cs[i].isMT = parcel_r_int32(p);
+			calls.cs[i].als = parcel_r_int32(p);
+			calls.cs[i].isVoice = parcel_r_int32(p);
+			calls.cs[i].isVoicePrivacy = parcel_r_int32(p);
+			calls.cs[i].number = parcel_r_string(p);
+			calls.cs[i].numberPresentation = parcel_r_int32(p);
+			calls.cs[i].name = parcel_r_string(p);
+			calls.cs[i].namePresentation = parcel_r_int32(p);
+			calls.cs[i].uusInfo = parcel_r_int32(p) ?
+					      auditmalloc(sizeof(RIL_UUS_Info)) :
+					      NULL;
+			if(calls.cs[i].uusInfo != NULL) {
+				// FIXME not implemented yet
+				printf("debug: got uusInfo\n");
+			}
+		}
+		wunlock(&calls.l);
+		for(i = 0; i < calls.num; i++) {
+			RIL_Call c = calls.cs[i];
+			printf("call %d:\n state %d\n index %d\n toa %d\n"
+			       "isMpty %d\n isMT %d\n als %d\n isVoice %d\n"
+			       "isVoicePrivacy %d\n number %s\n"
+			       "numberPresentation %d\n name %s\n"
+			       "namePresentation %d\n",
+			       i, c.state, c.index, c.toa, c.isMpty, c.isMT,
+			       c.als, c.isVoice, c.isVoicePrivacy, c.number,
+			       c.numberPresentation, c.name,
+			       c.namePresentation);
+		}
 		break;
 	}
 }
@@ -758,10 +1018,10 @@ void interpret_unsol_response(struct parcel *p)
 		buf[l] = '\0';
 		qproduce(smsq, buf, strlen(buf));
 
-		free(sms.msg);
-		free(sms.service_center);
-		free(sms.src_num);
-		free(sms.timestamp);
+		auditfree(sms.msg);
+		auditfree(sms.service_center);
+		auditfree(sms.src_num);
+		auditfree(sms.timestamp);
 		break;
 	case RIL_UNSOL_CALL_RING:
 		printf("incoming call\n");
@@ -784,7 +1044,6 @@ void loop_for_data(void *v)
 		int msglen, readlen, type, i, ret;
 		char *buf;
 		struct parcel p;
-		void *pdata;
 
 		parcel_init(&p);
 		if((ret = read(fd, &msglen, sizeof(msglen))) != sizeof(msglen)) {
@@ -794,7 +1053,7 @@ void loop_for_data(void *v)
 			return;
 		}
 		msglen = ntohl(msglen);
-		buf = (char *) malloc(msglen * sizeof(char));
+		buf = (char *) auditmalloc(msglen * sizeof(char));
 		if(buf == NULL) {
 			fprintf(stderr, "devphone:loop_for_data: malloc failed when attempting to allocate %d bytes\n", msglen);
 			return;
@@ -805,7 +1064,7 @@ void loop_for_data(void *v)
 				readlen);
 			fprintf(stderr,
 				"got too much or not enough data, aborting\n");
-			free(buf);
+			auditfree(buf);
 			return;
 		}
 		/*	for(i = 0; i < readlen; i++) {
@@ -814,6 +1073,7 @@ void loop_for_data(void *v)
 		printf("\n");*/
 		parcel_grow(&p, msglen);
 		memcpy(p.data, buf, msglen);
+		AUDITCHECK;
 		p.size = msglen;
 		//	printf("Received %d bytes of data from rild.\n", msglen);
 		type = parcel_r_int32(&p);
@@ -822,8 +1082,11 @@ void loop_for_data(void *v)
 		} else {
 			interpret_unsol_response(&p);
 		}
-		free(buf);
-		sleep(2); // FIXME may not be necessary
+		AUDITCHECK;
+		parcel_free(&p);
+		AUDITCHECK;
+		auditfree(buf);
+		AUDITCHECK;
 	}
 }
 
@@ -865,14 +1128,65 @@ void radio_power(int power)
 	parcel_free(&p);
 }
 
+static char *tmpaudit(int pno, Bhdr *b)
+{
+	printf("tmpaudit: pno = %d, bhdr = %p ", pno, b);
+	printf("magic = %x size = %d data = %p\n", b->magic, b->size, b->u.data);
+	return NULL;
+}
+
 void dial(char *number)
 {
 	struct parcel p;
+	struct mixer *mixer;
+	struct mixer_ctl *ctl;
+	Bhdr *b; // tmp
+
+	setCallClockSync(ril_client, SOUND_CLOCK_START);
+
+	set_mute(0);
+
+	printf("isConnectedRILD = %d\n", isConnectedRILD(ril_client));
+
+	mixer = auditmixer_open();
+
+	if(mixer == NULL) {
+		fprintf(stderr, "failed to open mixer\n");
+	}
+	//printf("==============\n");
+	//poolaudit(tmpaudit);
+	//printf("mixer = %p sizeof(ulong) = %d sizeof(mixer) = %d\n", mixer, sizeof(ulong), sizeof(mixer));
+	//b = ((Bhdr*)(((uchar*)mixer)-(((Bhdr*)0)->u.data)));
+	//printf("header at %p; magic: %x\n", b, b->magic);
+	//D2B(b, mixer); // tmp
 	
+	ctl = mixer_get_control(mixer, "Input Source", 0);
+	mixer_ctl_select(ctl, "Default");
+
+	ctl = mixer_get_control(mixer, "Voice Call Path", 0);
+	mixer_ctl_select(ctl, "RCV");
+	setCallClockSync(ril_client, SOUND_CLOCK_START);
+	AUDITCHECK;
+
+	printf("setcallvolume returned %d\n",
+	       setCallVolume(ril_client, SOUND_TYPE_SPEAKER, 4));
+	printf("setcallaudiopath returned %d\n", setCallAudioPath(ril_client, SOUND_AUDIO_PATH_HANDSET));
+	printf("setcallvolume returned %d\n",
+	       setCallVolume(ril_client, SOUND_TYPE_VOICE, 4));
+
+
+	printf("before mixer_close\n");
+	fflush(stdout);
+	auditmixer_close(mixer);
+	printf("after mixer_close");
+	fflush(stdout);
+	set_mute(0);
+
 	parcel_init(&p);
 	parcel_w_int32(&p, RIL_REQUEST_DIAL);
 	parcel_w_int32(&p, RIL_REQUEST_DIAL);
 	parcel_w_string(&p, number);
+	parcel_w_int32(&p, 0);
 	parcel_w_int32(&p, 0);
 	parcel_w_int32(&p, 0);
 
@@ -907,7 +1221,7 @@ void deactivate_net(void)
 	parcel_w_int32(&p, RIL_REQUEST_DEACTIVATE_DATA_CALL);
 	parcel_w_int32(&p, RIL_REQUEST_DEACTIVATE_DATA_CALL);
 	parcel_w_string(&p, "1"); // FIXME: this should be the CID returned by
-	                          // RIL_REQUEST_SETUP_DATA_CALL response
+				  // RIL_REQUEST_SETUP_DATA_CALL response
 	send_ril_parcel(&p);
 	parcel_free(&p);
 }
@@ -952,4 +1266,305 @@ void get_reg_state(void)
 	
 	send_ril_parcel(&p);
 	parcel_free(&p);
+}
+
+void set_mute(int muted)
+{
+	struct parcel p;
+	
+	parcel_init(&p);
+	parcel_w_int32(&p, RIL_REQUEST_SET_MUTE);
+	parcel_w_int32(&p, RIL_REQUEST_SET_MUTE);
+	parcel_w_int32(&p, 1);
+	parcel_w_int32(&p, muted);
+
+	send_ril_parcel(&p);
+	parcel_free(&p);
+}
+
+void get_current_calls(void)
+{
+	struct parcel p;
+
+	parcel_init(&p);
+	parcel_w_int32(&p, RIL_REQUEST_GET_CURRENT_CALLS);
+	parcel_w_int32(&p, RIL_REQUEST_GET_CURRENT_CALLS);
+
+	send_ril_parcel(&p);
+	parcel_free(&p);
+}
+
+void hangup(int index)
+{
+	struct parcel p;
+	
+	parcel_init(&p);
+	parcel_w_int32(&p, RIL_REQUEST_HANGUP);
+	parcel_w_int32(&p, RIL_REQUEST_HANGUP);
+	parcel_w_int32(&p, 1);
+	parcel_w_int32(&p, index);
+
+	send_ril_parcel(&p);
+	parcel_free(&p);
+}
+
+// memory audit stuff
+struct alloc_node {
+	void *block;
+	struct alloc_node *next;
+};
+
+#define AUDITCHECK printf("started auditcheck at %s:%d\n", __FILE__, __LINE__); \
+	auditcheck();							\
+	printf("finished auditcheck\n");
+
+struct alloc_node *alloc_head = NULL;
+
+void add_alloc_node(void *block)
+{
+	struct alloc_node *node = malloc(sizeof(struct alloc_node));
+	struct alloc_node *cur;
+
+	node->block = block;
+	node->next = NULL;
+	if(alloc_head == NULL) {
+		alloc_head = node;
+	} else {
+		for(cur = alloc_head; ; cur = cur->next) {
+			if(cur->next == NULL) {
+				cur->next = node;
+				break;
+			}
+		}
+	}
+}
+
+void del_alloc_node(void *block)
+{
+	struct alloc_node *cur;
+	struct alloc_node *prev;
+
+	for(cur = alloc_head; cur != nil; cur = cur->next) {
+		if(cur->block == block) {
+			if(cur == alloc_head) {
+				alloc_head = cur->next;
+			} else {
+				prev->next = cur->next;
+			}
+			free(cur);
+			return;
+		}
+		prev = cur;
+	}
+	fprintf(stderr, "del_alloc_node: could not find block %p\n", block);
+}
+
+void auditcheck(void)
+{
+	struct alloc_node *cur;
+	for(cur = alloc_head; cur != NULL; cur = cur->next) {
+		void *p = cur->block;
+		long hdr, canary;
+		size_t orig;
+		
+		hdr = *((long *)p - 2);
+		if(hdr != 0xcafeface) {
+			fprintf(stderr, "auditcheck: bad header at block %p, found %x\n",
+				p, canary);
+		}
+		orig = *((size_t *) p - 1);
+		canary = *((long *)(p + orig));
+		if(canary != 0xaaaaaaaa) {
+			fprintf(stderr, "auditcheck: bad canary at block %p, found %x\n",
+				p, canary);
+		}
+	}
+}
+
+void *auditmalloc(size_t orig)
+{
+	size_t size = orig + sizeof(size_t) + 2*sizeof(long);
+	void *ret;
+	ret = malloc(size);
+	if(ret == NULL) return NULL;
+	*((long *) ret) = 0xcafeface;
+	*(((size_t *) ret) + 1) = orig;
+	*((long *) ((char *)ret + orig + sizeof(long) + sizeof(size_t))) = 0xaaaaaaaa;
+	ret += sizeof(long) + sizeof(size_t);
+	add_alloc_node(ret);
+	return ret; 
+}
+
+void auditfree(void *p)
+{
+	long hdr, canary;
+	size_t orig;
+
+	if(p == NULL) return;
+	
+	hdr = *((long *)p - 2);
+	if(hdr != 0xcafeface) {
+		fprintf(stderr, "auditfree: bad header at block %p, found %x\n",
+			p, canary);
+	}
+	orig = *((size_t *) p - 1);
+	canary = *((long *)(p + orig));
+	if(canary != 0xaaaaaaaa) {
+		fprintf(stderr, "auditfree: bad canary at block %p, found %x\n",
+			p, canary);
+	}
+	del_alloc_node(p);
+	p = p - sizeof(long) - sizeof(size_t);
+	memset(p, 0xbadbad, orig + 2 * sizeof(long) + sizeof(size_t));
+	free(p);
+}
+
+char *auditstrdup(char *str)
+{
+	char *ret;
+	ret = auditmalloc((strlen(str) + 1) * sizeof(char));
+	strcpy(ret, str);
+	return ret;
+}
+
+void *auditcalloc(size_t nmemb, size_t size)
+{
+	size_t total = nmemb * size;
+	void *ret;
+	ret = auditmalloc(total);
+	memset(ret, 0, total);
+	return ret;
+}
+
+
+void *auditrealloc(void *p, size_t size)
+{
+	void *ret;
+	size_t orig = size;
+	del_alloc_node(p);
+	p = p - sizeof(size_t) - sizeof(long);
+	size += 2 * sizeof(long) + sizeof(size_t);
+	ret = realloc(p, size);
+	*(((size_t *) ret) + 1) = orig;
+
+	ret += sizeof(size_t) + sizeof(long);
+	*((long *)(ret + orig)) = 0xaaaaaaaa;
+	add_alloc_node(ret);
+	return ret;
+}
+// tmp
+
+
+struct mixer_ctl {
+    struct mixer *mixer;
+    struct snd_ctl_elem_info *info;
+    char **ename;
+};
+
+struct mixer {
+    int fd;
+    struct snd_ctl_elem_info *info;
+    struct mixer_ctl *ctl;
+    unsigned count;
+};
+
+
+void auditmixer_close(struct mixer *mixer)
+{
+    unsigned n,m;
+
+    if (mixer->fd >= 0)
+	close(mixer->fd);
+
+    if (mixer->ctl) {
+	for (n = 0; n < mixer->count; n++) {
+	    if (mixer->ctl[n].ename) {
+		unsigned max = mixer->ctl[n].info->value.enumerated.items;
+		for (m = 0; m < max; m++)
+		    auditfree(mixer->ctl[n].ename[m]);
+		auditfree(mixer->ctl[n].ename);
+	    }
+	}
+	auditfree(mixer->ctl);
+    }
+
+    if (mixer->info)
+	auditfree(mixer->info);
+
+    auditfree(mixer);
+}
+
+struct mixer *auditmixer_open(void)
+{
+    struct snd_ctl_elem_list elist;
+    struct snd_ctl_elem_info tmp;
+    struct snd_ctl_elem_id *eid = NULL;
+    struct mixer *mixer = NULL;
+    unsigned n, m;
+    int fd;
+
+    fd = open("/dev/snd/controlC0", O_RDWR);
+    if (fd < 0)
+	return 0;
+
+    memset(&elist, 0, sizeof(elist));
+    if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_LIST, &elist) < 0)
+	goto fail;
+
+    mixer = auditcalloc(1, sizeof(*mixer));
+    if (!mixer)
+	goto fail;
+
+    mixer->ctl = auditcalloc(elist.count, sizeof(struct mixer_ctl));
+    mixer->info = auditcalloc(elist.count, sizeof(struct snd_ctl_elem_info));
+    if (!mixer->ctl || !mixer->info)
+	goto fail;
+
+    eid = auditcalloc(elist.count, sizeof(struct snd_ctl_elem_id));
+    if (!eid)
+	goto fail;
+
+    mixer->count = elist.count;
+    mixer->fd = fd;
+    elist.space = mixer->count;
+    elist.pids = eid;
+    if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_LIST, &elist) < 0)
+	goto fail;
+
+    for (n = 0; n < mixer->count; n++) {
+	struct snd_ctl_elem_info *ei = mixer->info + n;
+	ei->id.numid = eid[n].numid;
+	if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_INFO, ei) < 0)
+	    goto fail;
+	mixer->ctl[n].info = ei;
+	mixer->ctl[n].mixer = mixer;
+	if (ei->type == SNDRV_CTL_ELEM_TYPE_ENUMERATED) {
+	    char **enames = auditcalloc(ei->value.enumerated.items, sizeof(char*));
+	    if (!enames)
+		goto fail;
+	    mixer->ctl[n].ename = enames;
+	    for (m = 0; m < ei->value.enumerated.items; m++) {
+		memset(&tmp, 0, sizeof(tmp));
+		tmp.id.numid = ei->id.numid;
+		tmp.value.enumerated.item = m;
+		if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_INFO, &tmp) < 0)
+		    goto fail;
+		enames[m] = auditstrdup(tmp.value.enumerated.name);
+		if (!enames[m])
+		    goto fail;
+	    }
+	}
+    }
+
+    auditfree(eid);
+    return mixer;
+
+fail:
+    if (eid)
+	auditfree(eid);
+    if (mixer)
+	mixer_close(mixer);
+    else if (fd >= 0)
+	close(fd);
+    return 0;
 }
