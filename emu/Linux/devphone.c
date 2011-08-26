@@ -35,17 +35,8 @@
 #include "parcel.h"
 // tmp
 #include "audit.h"
-#include <linux/ioctl.h>
-#define __force
-#define __bitwise
-#define __user
-#define AUDITCHECK 
 //end tmp
 
-// audio stuff taken from android source
-#define AUDIO_HW_OUT_PERIOD_MULT 8 // (8 * 128 = 1024 frames)
-#define AUDIO_HW_OUT_PERIOD_SZ (PCM_PERIOD_SZ_MIN * AUDIO_HW_OUT_PERIOD_MULT)
-#define AUDIO_HW_OUT_PERIOD_CNT 4
 // RIL-related definitions
 
 #define RESPONSE_SOLICITED 0
@@ -74,11 +65,6 @@ typedef enum _AudioPath {
     SOUND_AUDIO_PATH_BLUETOOTH_NO_NR,
     SOUND_AUDIO_PATH_HEADPHONE
 } AudioPath;
-
-typedef enum _SoundClockCondition {
-    SOUND_CLOCK_STOP,
-    SOUND_CLOCK_START
-} SoundClockCondition;
 
 // Inferno-related globals
 
@@ -110,6 +96,7 @@ Queue *smsq;
 static int signal_strength;
 static int fd;
 static int power_state = 0;
+
 static struct {
 	sem_t sem;
 	char *msg;
@@ -121,19 +108,6 @@ static struct {
 	int num;
 } calls;
 
-/* RIL client library globals */
-static void *ril_client_handle;
-static HRilClient ril_client = NULL;
-HRilClient (*openClientRILD)(void);
-int (*disconnectRILD)(HRilClient);
-int (*closeClientRILD)(HRilClient);
-int (*isConnectedRILD)(HRilClient);
-int (*connectRILD)(HRilClient);
-int (*setCallVolume)(HRilClient, SoundType, int);
-int (*setCallAudioPath)(HRilClient, AudioPath);
-int (*setCallClockSync)(HRilClient, SoundClockCondition);
-
-
 void loop_for_data(void *v);
 void send_sms(char *smsc_pdu, char *pdu);
 void dial(char *number);
@@ -141,15 +115,14 @@ void activate_net(void);
 void deactivate_net(void);
 void radio_power(int power);
 
-void auditmixer_close(struct mixer *mixer);
-struct mixer *auditmixer_open(void);
-
+// AudioFlinger layer stuff
 static void *af_handle;
 
 void (*af_setMode)(int);
 void (*af_setVoiceVolume)(float);
 void (*af_setParameters)(char *);
 void (*af_test)(void);
+
 enum audio_mode {
         MODE_INVALID = -2,
         MODE_CURRENT = -1,
@@ -172,8 +145,6 @@ void phoneinit(void)
 	af_setParameters = dlsym(af_handle, "af_setParameters");
 	af_test = dlsym(af_handle, "af_test");
 
-	printf("af_test = %p, af_setParameters = %p\n", af_test, af_setParameters);
-	af_test();
 	af_setMode(MODE_NORMAL);
 
 	calls.cs = NULL;
@@ -211,28 +182,6 @@ void phoneinit(void)
 		perror("setegid(0) failed");
 	}
 	kproc("phone", loop_for_data, 0, 0);
-	// Load RIL client functions, used for setting call volume, etc
-/*	ril_client_handle = dlopen("libsecril-client.so", RTLD_NOW);
-	if(ril_client_handle == NULL) {
-		fprintf(stderr, "opening libsecril-client.so failed: %s\n",
-			dlerror());
-	}
-	openClientRILD = dlsym(ril_client_handle, "OpenClient_RILD");
-	disconnectRILD = dlsym(ril_client_handle, "Disconnect_RILD");
-	closeClientRILD = dlsym(ril_client_handle, "CloseClient_RILD");
-	isConnectedRILD = dlsym(ril_client_handle, "isConnected_RILD");
-	connectRILD = dlsym(ril_client_handle, "Connect_RILD");
-	setCallVolume = dlsym(ril_client_handle, "SetCallVolume");
-	setCallAudioPath = dlsym(ril_client_handle, "SetCallAudioPath");
-	setCallClockSync = dlsym(ril_client_handle, "SetCallClockSync");
-
-	ril_client = openClientRILD();
-	if(ril_client == NULL) {
-		fprintf(stderr, "error in openClientRILD()\n");
-	}
-	if(connectRILD(ril_client) != 0) {
-		fprintf(stderr, "error while attempting to connectRILD()\n");
-		}*/
 }
 
 static Chan *phoneattach(char *spec)
@@ -441,6 +390,7 @@ void interpret_sol_response(struct parcel *p)
 		break;
 	case POWER_OFF:
 		power_state = 0;
+		af_setMode(MODE_NORMAL);
 		break;
 	case RIL_REQUEST_REGISTRATION_STATE:
 		if(!parcel_data_avail(p)) return;
@@ -602,7 +552,6 @@ void loop_for_data(void *v)
 		printf("\n");*/
 		parcel_grow(&p, msglen);
 		memcpy(p.data, buf, msglen);
-		AUDITCHECK;
 		p.size = msglen;
 		//	printf("Received %d bytes of data from rild.\n", msglen);
 		type = parcel_r_int32(&p);
@@ -611,11 +560,8 @@ void loop_for_data(void *v)
 		} else {
 			interpret_unsol_response(&p);
 		}
-		AUDITCHECK;
 		parcel_free(&p);
-		AUDITCHECK;
 		auditfree(buf);
-		AUDITCHECK;
 	}
 }
 
@@ -799,119 +745,4 @@ void hangup(int index)
 
 	send_ril_parcel(&p);
 	parcel_free(&p);
-}
-// tmp
-
-struct mixer_ctl {
-    struct mixer *mixer;
-    struct snd_ctl_elem_info *info;
-    char **ename;
-};
-
-struct mixer {
-    int fd;
-    struct snd_ctl_elem_info *info;
-    struct mixer_ctl *ctl;
-    unsigned count;
-};
-
-
-void auditmixer_close(struct mixer *mixer)
-{
-    unsigned n,m;
-
-    if (mixer->fd >= 0)
-	close(mixer->fd);
-
-    if (mixer->ctl) {
-	for (n = 0; n < mixer->count; n++) {
-	    if (mixer->ctl[n].ename) {
-		unsigned max = mixer->ctl[n].info->value.enumerated.items;
-		for (m = 0; m < max; m++)
-		    free(mixer->ctl[n].ename[m]);
-		free(mixer->ctl[n].ename);
-	    }
-	}
-	free(mixer->ctl);
-    }
-
-    if (mixer->info)
-	free(mixer->info);
-
-    free(mixer);
-}
-
-struct mixer *auditmixer_open(void)
-{
-    struct snd_ctl_elem_list elist;
-    struct snd_ctl_elem_info tmp;
-    struct snd_ctl_elem_id *eid = NULL;
-    struct mixer *mixer = NULL;
-    unsigned n, m;
-    int fd;
-
-    fd = open("/dev/snd/controlC0", O_RDWR);
-    if (fd < 0)
-	return 0;
-
-    memset(&elist, 0, sizeof(elist));
-    if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_LIST, &elist) < 0)
-	goto fail;
-
-    mixer = calloc(1, sizeof(*mixer));
-    if (!mixer)
-	goto fail;
-
-    mixer->ctl = calloc(elist.count, sizeof(struct mixer_ctl));
-    mixer->info = calloc(elist.count, sizeof(struct snd_ctl_elem_info));
-    if (!mixer->ctl || !mixer->info)
-	goto fail;
-
-    eid = calloc(elist.count, sizeof(struct snd_ctl_elem_id));
-    if (!eid)
-	goto fail;
-
-    mixer->count = elist.count;
-    mixer->fd = fd;
-    elist.space = mixer->count;
-    elist.pids = eid;
-    if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_LIST, &elist) < 0)
-	goto fail;
-
-    for (n = 0; n < mixer->count; n++) {
-	struct snd_ctl_elem_info *ei = mixer->info + n;
-	ei->id.numid = eid[n].numid;
-	if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_INFO, ei) < 0)
-	    goto fail;
-	mixer->ctl[n].info = ei;
-	mixer->ctl[n].mixer = mixer;
-	if (ei->type == SNDRV_CTL_ELEM_TYPE_ENUMERATED) {
-	    char **enames = calloc(ei->value.enumerated.items, sizeof(char*));
-	    if (!enames)
-		goto fail;
-	    mixer->ctl[n].ename = enames;
-	    for (m = 0; m < ei->value.enumerated.items; m++) {
-		memset(&tmp, 0, sizeof(tmp));
-		tmp.id.numid = ei->id.numid;
-		tmp.value.enumerated.item = m;
-		if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_INFO, &tmp) < 0)
-		    goto fail;
-		enames[m] = strdup(tmp.value.enumerated.name);
-		if (!enames[m])
-		    goto fail;
-	    }
-	}
-    }
-
-    free(eid);
-    return mixer;
-
-fail:
-    if (eid)
-	free(eid);
-    if (mixer)
-	mixer_close(mixer);
-    else if (fd >= 0)
-	close(fd);
-    return 0;
 }

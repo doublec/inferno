@@ -15,36 +15,22 @@ using namespace android;
 extern "C" void af_setMode(int mode);
 extern "C" void af_setVoiceVolume(float volume);
 extern "C" void af_setParameters(char *keysvalues);
-extern "C" void af_test(void);
 
 void af_setMode(int mode)
 {
-	printf("hello from setMode\n");
 	AudioSystem::setMode(mode);
-	printf("goodbye from setMode\n");
 }
 
 void af_setVoiceVolume(float volume)
 {
-	printf("hello from setVoiceVolume(%f)\n", volume);
-	fflush(stdout);
 	AudioSystem::setVoiceVolume(volume);
-	printf("goodbye from setVoiceVolume()\n");
-	fflush(stdout);
-}
-
-void af_test(void)
-{
-	printf("hello from af_test()\n");
 }
 
 void af_setParameters(char *keysvalues)
 {
-	printf("hello from af_setParameters(%s)\n", keysvalues);
 	// setParameters(int ioHandle, const String8 &keyValuePairs)
 	// if ioHandle is 1, we can get to the audio out stream
 	AudioSystem::setParameters(1, String8(keysvalues));
-	printf("goodbye from af_setParameters()\n");
 }
 
 int main(void)
