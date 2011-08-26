@@ -52,6 +52,7 @@ TARG=\
 	sendmail.dis\
 	sh.dis\
 	smenu.dis\
+	sms.dis\
 	snake.dis\
 	stopwatch.dis\
 	sweeper.dis\

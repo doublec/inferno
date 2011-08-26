@@ -6,6 +6,9 @@
 #include	"draw.h"
 #include	"version.h"
 
+/* Android thing */
+#include <cutils/properties.h>
+
 int		rebootargc = 0;
 char**		rebootargv;
 static	char	*imod = "/dis/emuinit.dis";
@@ -125,6 +128,7 @@ static void
 option(int argc, char *argv[], void (*badusage)(void))
 {
 	char *cp;
+	char *device[128]; // I think PROP_NAME_MAX is 96 so we're good
 
 	ARGBEGIN {
 	default:
@@ -133,7 +137,9 @@ option(int argc, char *argv[], void (*badusage)(void))
 		cp = EARGF(badusage());
 		type = cp[0];
 		tkfont = "/fonts/pelm/ascii.12.font";
-		if (type == 'c') {
+		property_get("ro.product.device", device, "");
+		print("read ro.product.device = %s\n", device);
+		if (!strncmp(device, "encore", 6)) {
 			system("cp /data/inferno/etc/buttonserver-nook-color.cfg /data/inferno/etc/buttonserver.cfg");
 			eventfiles = malloc(5*sizeof(char *));
 			eventfiles[0] = "/dev/input/event0";
@@ -150,17 +156,8 @@ option(int argc, char *argv[], void (*badusage)(void))
 			maineventnum = 0;
 			system("echo \"on\" > /sys/power/state");
 			system("echo 255 > /sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness");
-		} else if (type == 'e') {
-			eventfiles = malloc(2*sizeof(char *));
-			eventfiles[0] = "/dev/input/event0";
-			eventfiles[1] = NULL;
-			displaydepth = 16;
-			geom("320x480");
-			mousefile = "/dev/input/event0";
-			homedevice = "/dev/input/event0";
-			voldevice = "/dev/input/event0";
-			maineventnum = 0;
-		} else {
+		} else if (!strncmp(device, "crespo", 6)) {
+			print("hey it's a crespo\n");
 			system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
 			eventfiles = malloc(7*sizeof(char *));
 			eventfiles[0] = "/dev/input/event0";
@@ -178,6 +175,17 @@ option(int argc, char *argv[], void (*badusage)(void))
 			maineventnum = 2;
 			system("echo \"on\" > /sys/power/state");
 			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
+		} else {	
+			/* This is the emulator, I actually don't know what its device reports. */
+			eventfiles = malloc(2*sizeof(char *));
+			eventfiles[0] = "/dev/input/event0";
+			eventfiles[1] = NULL;
+			displaydepth = 16;
+			geom("320x480");
+			mousefile = "/dev/input/event0";
+			homedevice = "/dev/input/event0";
+			voldevice = "/dev/input/event0";
+			maineventnum = 0;
 		}
 		break;
 	case 'b':		/* jit array bounds checking (obsolete, now on by default) */
