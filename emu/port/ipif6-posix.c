@@ -293,8 +293,14 @@ resolve(char *name, char **hostv, int n, int isnumeric)
 	hints.ai_flags = isnumeric? AI_NUMERICHOST: 0;
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
-	if(getaddrinfo(name, nil, &hints, &res0) < 0)
+#ifdef ANDROID
+	// environ points nowhere -- why?
+	environ = malloc(sizeof(char));
+	*environ = '\0';
+#endif
+	if(getaddrinfo(name, nil, &hints, &res0) < 0) {
 		return 0;
+	}
 	i = 0;
 	for(r = res0; r != nil && i < n; r = r->ai_next) {
 		if(r->ai_family == AF_INET)
