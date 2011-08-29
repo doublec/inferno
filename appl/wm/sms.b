@@ -38,12 +38,23 @@ conv_window := array[] of {
 
 # display the conversation with just one person
 thread_window := array[] of {
-	"frame .thread",
+	"frame .hist",
+	"frame .compose",
 	"text .messages -state disabled -wrap word -font /fonts/lucida/unicode.14.font -yscrollcommand {.sb set}",
 	"scrollbar .sb -width 40 -orient vertical -command {.messages yview}",
-	"pack .sb -in .thread -side left -fill y",
-	"pack .messages -in .thread -side left -fill both -expand 1",
-	"pack .thread -side top -anchor center -fill both -expand 1",
+	"pack .sb -in .hist -side left -fill y",
+	"pack .messages -in .hist -side left -fill both -expand 1",
+	#"pack .hist -side top -anchor center -fill both -expand 1",
+	"text .compose.t -height 3 -wrap word -font /fonts/lucida/unicode.14.font -yscrollcommand {.compose.sb set}",
+	"scrollbar .compose.sb -width 40 -orient vertical -command {.compose.t yview}",
+	"button .compose.send -text {Send} -font /fonts/lucida/unicode.12.font -command {send composecmd sendsms}",
+	"pack .compose.sb -in .compose -side left -fill y",
+	"pack .compose.send -in .compose -side right -fill y -ipadx 3 -expand 1",
+	"pack .compose.t -in .compose -side left -fill y",
+	"button .goback -text {Back} -font /fonts/lucida/unicode.12.font -command {send composecmd goback}",
+	"pack .goback -side top -anchor nw",
+	"pack .hist -side top -fill both -expand 1",
+	"pack .compose -side top -fill both -expand 1",
 	".pack propagate . 0",
 };
 
@@ -68,7 +79,6 @@ init(ctxt: ref Draw->Context, nil: list of string)
 	for (i := 0; i < len conv_window; i++)
 		tk->cmd(t, conv_window[i]);
 
-	#tk->cmd(t, ".f.lb insert end 'john");
 	convs := loadconvos();
 	for (; convs != nil; convs = tl convs)
 		tk->cmd(t, ".f.lb insert end '"+ hd convs);
@@ -79,32 +89,49 @@ init(ctxt: ref Draw->Context, nil: list of string)
 	u : string;	
 	# Event loop
 	for(;;) {
+		tk->cmd(t, "update");
 		alt {
 		s := <-t.ctxt.kbd =>
 			tk->keyboard(t, s);
 		s := <-t.ctxt.ptr =>
 			tk->pointer(t, *s);
+			if (s.buttons == 0) {
+			sel := tk->cmd(t, ".f.lb curselection");
+			if (sel == nil)
+				continue;
+			u = tk->cmd(t, ".f.lb get " + sel);
+			sys->print("read %s\n", u);
+			if (u != nil) {
+				#break;
+				spawn readthread(ctxt, u);
+			}
+			tk->cmd(t, ".f.lb selection clear 0");
+			}
 		s := <-t.ctxt.ctl or
 		s = <-t.wreq or
 		s = <-wmchan =>
 			tkclient->wmctl(t, s);
 		}
-		sel := tk->cmd(t, ".f.lb curselection");
-		if (sel == nil)
-			continue;
-		u = tk->cmd(t, ".f.lb get " + sel);
-		sys->print("read %s\n", u);
-		if (u != nil)
-			break;
+
 	}
+}
 
-	# Clear da screen
-	tk->cmd(t, "pack forget .conv");
+readthread(ctxt: ref Draw->Context, u: string)
+{
+	(t, wmchan) := tkclient->toplevel(ctxt, nil, "Send message", 0);
+	cmd := chan of string;
+	tk->namechan(t, cmd, "cmd");
 
-	for (i = 0; i < len thread_window; i++)
+	# We need a channel for commands and such
+	composecmd := chan of string;
+	tk->namechan(t, composecmd, "composecmd");
+
+	for (i := 0; i < len thread_window; i++)
 		tk->cmd(t, thread_window[i]);
 
 	tk->cmd(t, "update");
+
+	tkclient->onscreen(t, "onscreen");
 
 	data := bio->open("/usr/"+rf("/dev/user")+"/lib/sms/"+u, bio->OREAD);
 	if (data == nil) {
@@ -112,7 +139,6 @@ init(ctxt: ref Draw->Context, nil: list of string)
 		return;
 	}
 
-	#flipflop := 0;
 	tk->cmd(t, ".messages tag configure me -fg black");
 	tk->cmd(t, ".messages tag configure them -fg #3333ee");
 	tk->cmd(t, "update");
@@ -124,8 +150,6 @@ init(ctxt: ref Draw->Context, nil: list of string)
 				tk->cmd(t, ".messages insert end " + tk->quote(s) + " { them }");
 
 			tk->cmd(t, ".messages insert end '\n");
-
-			#flipflop = !flipflop;
 		}
 	}
 
@@ -133,7 +157,7 @@ init(ctxt: ref Draw->Context, nil: list of string)
 	tk->cmd(t, ".messages scan dragto -100000 -100000");
 	tk->cmd(t, "update");
 
-	# TODO: take this out after we do the appropriate looping crapp
+	tkclient->startinput(t, "kbd"::"ptr"::nil);
 	for (;;) {
 		alt {
 		s := <-t.ctxt.kbd =>
@@ -143,10 +167,15 @@ init(ctxt: ref Draw->Context, nil: list of string)
 		s := <-t.ctxt.ctl or
 		s = <-t.wreq or
 		s = <-wmchan =>
-			tkclient->wmctl(t, s);
+				tkclient->wmctl(t, s);
+		s := <-composecmd =>
+			sys->print("read %s\n", s);
+			if (s == "goback")
+				return;
 		}
 	}
 }
+
 
 # Get a list of files under /usr/$user/lib/sms/
 loadconvos(): list of string

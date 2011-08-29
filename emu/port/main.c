@@ -42,7 +42,6 @@ static void
 usage(void)
 {
 	fprint(2, "Usage: emu [options...] [file.dis [args...]]\n"
-		"\t-t<device type>\t #'n' = nook color, 's' = nexus s, 'e' = emulator\n"
 		"\t-c[0-9]\n"
 		"\t-d file.dis\n"
 		"\t-s\n"
@@ -128,65 +127,11 @@ static void
 option(int argc, char *argv[], void (*badusage)(void))
 {
 	char *cp;
-	char *device[128]; // I think PROP_NAME_MAX is 96 so we're good
 
 	ARGBEGIN {
 	default:
 		badusage();
-	case 't':
-		cp = EARGF(badusage());
-		type = cp[0];
-		tkfont = "/fonts/pelm/ascii.12.font";
-		property_get("ro.product.device", device, "");
-		print("read ro.product.device = %s\n", device);
-		if (!strncmp(device, "encore", 6)) {
-			system("cp /data/inferno/etc/buttonserver-nook-color.cfg /data/inferno/etc/buttonserver.cfg");
-			eventfiles = malloc(5*sizeof(char *));
-			eventfiles[0] = "/dev/input/event0";
-			eventfiles[1] = "/dev/input/event1";
-			eventfiles[2] = "/dev/input/event2";
-			eventfiles[3] = "/dev/input/event3";
-			eventfiles[4] = NULL;
-			displaydepth = 32;
-			geom("600x1024");
-			rotation_opt = 1;
-			mousefile = "/dev/input/event2";
-			homedevice = "/dev/input/event0";
-			voldevice = "/dev/input/event1";
-			maineventnum = 0;
-			system("echo \"on\" > /sys/power/state");
-			system("echo 255 > /sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness");
-		} else if (!strncmp(device, "crespo", 6)) {
-			print("hey it's a crespo\n");
-			system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
-			eventfiles = malloc(7*sizeof(char *));
-			eventfiles[0] = "/dev/input/event0";
-			eventfiles[1] = "/dev/input/event1";
-			eventfiles[2] = "/dev/input/event2";
-			eventfiles[3] = "/dev/input/event3";
-			eventfiles[4] = "/dev/input/event4";
-			eventfiles[5] = "/dev/input/event5";
-			eventfiles[6] = NULL;
-			displaydepth = 32;
-			geom("480x800");
-			mousefile = "/dev/input/event0";
-			homedevice = "/dev/input/event5";
-			voldevice = "/dev/input/event2";
-			maineventnum = 2;
-			system("echo \"on\" > /sys/power/state");
-			system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
-		} else {	
-			/* This is the emulator, I actually don't know what its device reports. */
-			eventfiles = malloc(2*sizeof(char *));
-			eventfiles[0] = "/dev/input/event0";
-			eventfiles[1] = NULL;
-			displaydepth = 16;
-			geom("320x480");
-			mousefile = "/dev/input/event0";
-			homedevice = "/dev/input/event0";
-			voldevice = "/dev/input/event0";
-			maineventnum = 0;
-		}
+	case 't':		/* Android device specification, but we can figure it out automatically now */
 		break;
 	case 'b':		/* jit array bounds checking (obsolete, now on by default) */
 		break;
@@ -296,6 +241,7 @@ main(int argc, char *argv[])
 	char *opt, *p;
 	char *enva[20];
 	int envc;
+	char *device[128]; // I think PROP_NAME_MAX is 96 so we're good
 
 	quotefmtinstall();
 	savestartup(argc, argv);
@@ -310,6 +256,60 @@ main(int argc, char *argv[])
 		option(envc, enva, envusage);
 	}
 	option(argc, argv, usage);
+
+	/* Set up Android-specific things */
+	/* This will definitely need to be factored out later */
+	tkfont = "/fonts/pelm/ascii.12.font";
+	property_get("ro.product.device", device, "");
+	print("read ro.product.device = %s\n", device);
+	if (!strncmp(device, "encore", 6)) {
+		system("cp /data/inferno/etc/buttonserver-nook-color.cfg /data/inferno/etc/buttonserver.cfg");
+		eventfiles = malloc(5*sizeof(char *));
+		eventfiles[0] = "/dev/input/event0";
+		eventfiles[1] = "/dev/input/event1";
+		eventfiles[2] = "/dev/input/event2";
+		eventfiles[3] = "/dev/input/event3";
+		eventfiles[4] = NULL;
+		displaydepth = 32;
+		geom("600x1024");
+		rotation_opt = 1;
+		mousefile = "/dev/input/event2";
+		homedevice = "/dev/input/event0";
+		voldevice = "/dev/input/event1";
+		maineventnum = 0;
+		system("echo \"on\" > /sys/power/state");
+		system("echo 255 > /sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness");
+	} else if (!strncmp(device, "crespo", 6)) {
+		system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
+		eventfiles = malloc(7*sizeof(char *));
+		eventfiles[0] = "/dev/input/event0";
+		eventfiles[1] = "/dev/input/event1";
+		eventfiles[2] = "/dev/input/event2";
+		eventfiles[3] = "/dev/input/event3";
+		eventfiles[4] = "/dev/input/event4";
+		eventfiles[5] = "/dev/input/event5";
+		eventfiles[6] = NULL;
+		displaydepth = 32;
+		geom("480x800");
+		mousefile = "/dev/input/event0";
+		homedevice = "/dev/input/event5";
+		voldevice = "/dev/input/event2";
+		maineventnum = 2;
+		system("echo \"on\" > /sys/power/state");
+		system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
+	} else {	
+		/* This is the emulator, I actually don't know what its device reports. */
+		eventfiles = malloc(2*sizeof(char *));
+		eventfiles[0] = "/dev/input/event0";
+		eventfiles[1] = NULL;
+		displaydepth = 16;
+		geom("320x480");
+		mousefile = "/dev/input/event0";
+		homedevice = "/dev/input/event0";
+		voldevice = "/dev/input/event0";
+		maineventnum = 0;
+	}
+
 	eve = strdup("inferno");
 
 	opt = "interp";
