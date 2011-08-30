@@ -44,12 +44,6 @@
 #define POWER_ON 2000
 #define POWER_OFF 2001
 
-struct RilClient {
-    void *prv;
-};
-
-typedef struct RilClient * HRilClient;
-
 typedef enum _SoundType {
     SOUND_TYPE_VOICE,
     SOUND_TYPE_SPEAKER,
@@ -98,12 +92,18 @@ static int fd;
 static int power_state = 0;
 
 static struct {
-	sem_t sem;
+	QLock rl; // to prevent from waiting on rendez twice (causes a panic)
+	Rendez r;
+	int ready;
+	int used;
 	char *msg;
 } status_msg;
 
 static struct {
-	RWLock l;
+	QLock rl; // to prevent from waiting on rendez twice (causes a panic)
+	Rendez r;
+	int ready;
+	int used;
 	RIL_Call *cs;
 	int num;
 } calls;
@@ -133,6 +133,17 @@ enum audio_mode {
         NUM_MODES  // not a valid entry, denotes end-of-list
 };
 
+
+int calls_ready(void *unused)
+{
+	return calls.ready;
+}
+
+int status_ready(void *unused)
+{
+	return status_msg.ready;
+}
+
 void phoneinit(void)
 {
 	af_handle = dlopen("libinfernoaudio.so", RTLD_NOW);
@@ -143,22 +154,27 @@ void phoneinit(void)
 	af_setMode = dlsym(af_handle, "af_setMode");
 	af_setVoiceVolume = dlsym(af_handle, "af_setVoiceVolume");
 	af_setParameters = dlsym(af_handle, "af_setParameters");
-	af_test = dlsym(af_handle, "af_test");
+
+	if(!(af_setMode && af_setVoiceVolume && af_setParameters)) {
+		fprintf(stderr, "could not load AudioFlinger functions");
+		dlclose(af_handle);
+	}
 
 	af_setMode(MODE_NORMAL);
 
 	calls.cs = NULL;
 	calls.num = 0;
-	memset(&calls.l, 0, sizeof(RWLock));
-
+	calls.ready = 0;
+	calls.used = 0;
+	
+	status_msg.ready = 0;
+	status_msg.used = 0;
 	phoneq = qopen(512, 0, nil, nil);
 	if(phoneq == 0)
 		panic("no memory");
 	smsq = qopen(512, 0, nil, nil);
 	if(smsq == 0)
 		panic("no memory");
-
-	sem_init(&status_msg.sem, 0, 0);
 
 	// set up proper permissions (need to be user radio, group radio to
 	// access socket)
@@ -168,12 +184,14 @@ void phoneinit(void)
 	if(seteuid(1001) == -1) {
 		perror("seteuid(1001) failed");
 	}
+
 	fd = socket_local_client("rild",
 				 ANDROID_SOCKET_NAMESPACE_RESERVED,
 				 SOCK_STREAM);
 	if(fd == -1) {
 		perror("socket_local_client failed");
 	}
+
 	// set privileges back to root/root
 	if(seteuid(0) == -1) {
 		perror("seteuid(0) failed");
@@ -181,6 +199,7 @@ void phoneinit(void)
 	if(setegid(0) == -1) {
 		perror("setegid(0) failed");
 	}
+
 	kproc("phone", loop_for_data, 0, 0);
 }
 
@@ -225,6 +244,7 @@ static void phoneclose(Chan *c)
 static long phoneread(Chan *c, void *va, long n, vlong offset)
 {
 	char buf[255];
+	int i, str_offset;
 	if(c->qid.type & QTDIR) {
 		return devdirread(c, va, n, phonetab, nelem(phonetab), devgen);
 	}
@@ -242,15 +262,49 @@ static long phoneread(Chan *c, void *va, long n, vlong offset)
 		snprintf(buf, sizeof(buf), "%d\n", signal_strength);
 		return readstr(offset, va, n, buf);
 	case Qstatus:
-		sem_wait(&status_msg.sem);
-		// terrible
-		if(offset < strlen(status_msg.msg)) {
-			sem_post(&status_msg.sem);
+		Sleep(&status_msg.r, status_ready, NULL);
+		if(status_msg.ready == -1) {
+			// an error occurred
+			status_msg.used = 1;
+			return readstr(offset, va, n, "error\n");
 		}
-		// FIXME lock
+		if(status_msg.used) {
+			status_msg.ready = 0;
+			status_msg.used = 0;
+			return 0; // already sent the data
+		}
+		status_msg.used = 1;
 		return readstr(offset, va, n, status_msg.msg);
 	case Qcalls:
-		return readstr(offset, va, n, "fixme\n");
+		Sleep(&calls.r, calls_ready, NULL);
+		if(calls.ready == -1) {
+			// an error occurred
+			calls.used = 1;
+			return readstr(offset, va, n, "error\n");
+		}
+		if(calls.used) {
+			calls.ready = 0;
+			calls.used = 0;
+			return 0; // already sent the data
+		}
+		calls.used = 1;
+
+		str_offset = 0;
+		for(i = 0; i < calls.num; i++) {
+			RIL_Call c = calls.cs[i];
+			str_offset += snprintf(va + str_offset, n - str_offset,
+					       "call %d:\n "
+					       " state %d\n index %d\n toa %d\n"
+					       " isMpty %d\n isMT %d\n als %d\n isVoice %d\n"
+					       " isVoicePrivacy %d\n number %s\n"
+					       " numberPresentation %d\n name %s\n"
+					       " namePresentation %d\n",
+					       i, c.state, c.index, c.toa, c.isMpty, c.isMT,
+					       c.als, c.isVoice, c.isVoicePrivacy, c.number,
+					       c.numberPresentation, c.name,
+					       c.namePresentation);
+		}
+		return str_offset;
 	}
 	return 0;
 }
@@ -277,14 +331,17 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 		} else if(strcmp(args[0], "off") == 0) {
 			radio_power(0);
 		} else if(strcmp(args[0], "net") == 0) {
-			if(nargs != 2) {
-				break;
+			if(nargs >= 2) {
+				if(strcmp(args[1], "on") == 0) {
+					activate_net();
+				} else if(strcmp(args[1], "off") == 0) {
+					deactivate_net();
+				}
 			}
-			if(strcmp(args[1], "on") == 0) {
-				activate_net();
-			} else if(strcmp(args[1], "off") == 0) {
-				deactivate_net();
-			}
+		} else if(strcmp(args[0], "mute") == 0) {
+			set_mute(1);
+		} else if(strcmp(args[1], "unmute") == 0) {
+			set_mute(0);
 		}
 		auditfree(str);
 		break;
@@ -295,21 +352,20 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 		printf("Qsms: va = %s\n", str);
 		nargs = getfields(str, args, 3, 1, " ");
 		if(strcmp(args[0], "send") == 0) {
-			if(nargs != 3) {
-				break;
+			if(nargs == 3) {
+				runestr = auditmalloc((utflen(args[2]) + 1) * sizeof(Rune));
+				for(i = 0, j = 0; j < strlen(args[2]); i++) {
+					j += chartorune(runestr + i, args[2] + j);
+				}
+				runestr[i] = 0;
+				pdu = encode_sms(args[1], runestr);
+				send_sms(NULL, pdu);
+				
+				auditfree(runestr);
+				auditfree(pdu);
 			}
-			runestr = auditmalloc((utflen(args[2]) + 1) * sizeof(Rune));
-			for(i = 0, j = 0; j < strlen(args[2]); i++) {
-				j += chartorune(runestr + i, args[2] + j);
-			}
-			runestr[i] = 0;
-			pdu = encode_sms(args[1], runestr);
-			send_sms(NULL, pdu);
-			
-			auditfree(str);
-			auditfree(runestr);
-			auditfree(pdu);
 		}
+		auditfree(str);
 		break;
 	case Qphone:
 		str = auditmalloc((n + 1) * sizeof(char));
@@ -319,13 +375,20 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 		nargs = getfields(str, args, sizeof(args), 1, " \n");
 		if(strcmp(args[0], "answer") == 0) {
 			answer();
-			return n;
 		} else if(strcmp(args[0], "dial") == 0) {
 			if(nargs != 2) {
 				fprintf(stderr, "malformed dial request\n");
+				auditfree(str);
 				break;
 			}
 			dial(args[1]);
+		} else if(strcmp(args[0], "hangup") == 0) {
+			if(nargs != 2) {
+				fprintf(stderr, "malformed hangup request\n");
+				auditfree(str);
+				break;
+			}
+			hangup(atoi(args[1]));
 		}
 		auditfree(str);
 		break;
@@ -363,10 +426,21 @@ void handle_error(int seq, int error)
 	case RIL_REQUEST_SEND_SMS:
 		qproduce(smsq, errmsg, strlen(errmsg));
 		break;
+	case RIL_REQUEST_DIAL:
+		qproduce(phoneq, errmsg, strlen(errmsg));
+		break;
+	case RIL_REQUEST_REGISTRATION_STATE:
+		status_msg.ready = -1;
+		Wakeup(&status_msg.r);
+		break;
+	case RIL_REQUEST_GET_CURRENT_CALLS:
+		calls.ready = -1;
+		Wakeup(&calls.r);
+		break;
 	}
 }
 
-void interpret_sol_response(struct parcel *p)
+void handle_sol_response(struct parcel *p)
 {
 	int seq, error, i, num, offset = 0;
 	char buf[200];
@@ -399,46 +473,35 @@ void interpret_sol_response(struct parcel *p)
 		for(i = 0; i < num; i++) {
 			offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", parcel_r_string(p));
 		}
-		// FIXME lock
 		auditfree(status_msg.msg);
 		status_msg.msg = auditstrdup(buf);
-		sem_post(&status_msg.sem);
+		status_msg.ready = 1;
+		Wakeup(&status_msg.r);
 		break;
 	case RIL_REQUEST_DIAL:
 		printf("got RIL_REQUEST_DIAL success\n");
 		break;
 	case RIL_REQUEST_GET_CURRENT_CALLS:
-		// DEBUG
-		printf("current pos: %d\n", p->offset);
-		for(i = 0; i < p->size; i++) {
-			printf("%02x ", p->data[i]);
-		}
-		printf("\n");
-
 		if(!parcel_data_avail(p)) {
+			calls.ready = 1;
+			calls.num = 0;
+			Wakeup(&calls.r);
 			break;
 		}
 
-		wlock(&calls.l);
-		printf("before free\n");
 		for(i = 0; i < calls.num; i++) {
-			printf("freeing number\n");
 			auditfree(calls.cs[i].number);
-			printf("freeing name\n");
 			auditfree(calls.cs[i].name);
-			printf("freeing uusInfo\n");
 			auditfree(calls.cs[i].uusInfo);
 		}
 		auditfree(calls.cs);
-		printf("after free\n");
 		num = parcel_r_int32(p);
-		printf("after read\n");
 		calls.num = num;
 		calls.cs = auditmalloc(num * sizeof(RIL_Call));
-		printf("got past malloc\n");
 		if(calls.cs == NULL) {
-			wunlock(&calls.l);
 			fprintf(stderr, "malloc failed while making %d RIL_Calls\n", num);
+			calls.ready = -1;
+			Wakeup(&calls.r);
 			break;
 		}
 
@@ -463,29 +526,19 @@ void interpret_sol_response(struct parcel *p)
 				printf("debug: got uusInfo\n");
 			}
 		}
-		wunlock(&calls.l);
-		for(i = 0; i < calls.num; i++) {
-			RIL_Call c = calls.cs[i];
-			printf("call %d:\n state %d\n index %d\n toa %d\n"
-			       "isMpty %d\n isMT %d\n als %d\n isVoice %d\n"
-			       "isVoicePrivacy %d\n number %s\n"
-			       "numberPresentation %d\n name %s\n"
-			       "namePresentation %d\n",
-			       i, c.state, c.index, c.toa, c.isMpty, c.isMT,
-			       c.als, c.isVoice, c.isVoicePrivacy, c.number,
-			       c.numberPresentation, c.name,
-			       c.namePresentation);
-		}
+		calls.ready = 1;
+		Wakeup(&calls.r);
 		break;
 	}
 }
 
-void interpret_unsol_response(struct parcel *p)
+void handle_unsol_response(struct parcel *p)
 {
 	int resp_type;
 	char buf[300];
 	int l;
 	struct recvd_sms sms;
+
 	resp_type = parcel_r_int32(p);
 //	printf("unsolicited: type = %d, data left = %d\n", resp_type,
 //	       parcel_data_avail(p));
@@ -507,7 +560,7 @@ void interpret_unsol_response(struct parcel *p)
 		qproduce(phoneq, "ring\n", 5);
 		break;
 	case RIL_UNSOL_SIGNAL_STRENGTH:
-		signal_strength = parcel_r_int32(p) / 6; // signal strength from cell tower
+		signal_strength = parcel_r_int32(p);
 		// TODO: use bit error rate instead of cell tower reception
 		// when available (during a call)
 		break;
@@ -556,9 +609,9 @@ void loop_for_data(void *v)
 		//	printf("Received %d bytes of data from rild.\n", msglen);
 		type = parcel_r_int32(&p);
 		if(type == RESPONSE_SOLICITED) {
-			interpret_sol_response(&p);
+			handle_sol_response(&p);
 		} else {
-			interpret_unsol_response(&p);
+			handle_unsol_response(&p);
 		}
 		parcel_free(&p);
 		auditfree(buf);
@@ -568,6 +621,8 @@ void loop_for_data(void *v)
 void send_ril_parcel(struct parcel *p)
 {
 	int pktlen, ret;
+
+	// we write the length in bytes, then the parcel data
 	pktlen = htonl(p->size);
 	ret = write(fd, (void *)&pktlen, sizeof(pktlen));
 	if(ret < 0) perror("write to ril failed");
@@ -580,34 +635,25 @@ void answer(void)
 	struct parcel p;
 	
 	parcel_init(&p);
-	parcel_w_int32(&p, RIL_REQUEST_ANSWER);
-	parcel_w_int32(&p, RIL_REQUEST_ANSWER);
+	parcel_w_int32(&p, RIL_REQUEST_ANSWER); // request id
+	parcel_w_int32(&p, RIL_REQUEST_ANSWER); // reply id
 
 	send_ril_parcel(&p);
 	parcel_free(&p);
 }
 
-// power is 1 for on and 0 for off
 void radio_power(int power)
 {
 	struct parcel p;
 
 	parcel_init(&p);
-	printf("setting radio power to %d\n", power);
-	parcel_w_int32(&p, RIL_REQUEST_RADIO_POWER);
-	parcel_w_int32(&p, power ? POWER_ON : POWER_OFF);
-	parcel_w_int32(&p, 1);
-	parcel_w_int32(&p, power);
+	parcel_w_int32(&p, RIL_REQUEST_RADIO_POWER); // request id
+	parcel_w_int32(&p, power ? POWER_ON : POWER_OFF); // reply id
+	parcel_w_int32(&p, 1); // ??? java code does it
+	parcel_w_int32(&p, power); // 1 on, 0 off
 
 	send_ril_parcel(&p);
 	parcel_free(&p);
-}
-
-static char *tmpaudit(int pno, Bhdr *b)
-{
-	printf("tmpaudit: pno = %d, bhdr = %p ", pno, b);
-	printf("magic = %x size = %d data = %p\n", b->magic, b->size, b->u.data);
-	return NULL;
 }
 
 void dial(char *number)
@@ -616,18 +662,19 @@ void dial(char *number)
 	struct mixer *mixer;
 	struct mixer_ctl *ctl;
 
-	af_setMode(MODE_IN_CALL);
-	af_setParameters("routing=1");
+	af_setMode(MODE_IN_CALL); // tell audioflinger we want to start a call
+	af_setParameters("routing=1"); // tell AF where to route sound
 	af_setVoiceVolume(1.0f);
 	set_mute(0);
 
 	parcel_init(&p);
-	parcel_w_int32(&p, RIL_REQUEST_DIAL);
-	parcel_w_int32(&p, RIL_REQUEST_DIAL);
-	parcel_w_string(&p, number);
-	parcel_w_int32(&p, 0);
-	parcel_w_int32(&p, 0);
-	parcel_w_int32(&p, 0);
+	parcel_w_int32(&p, RIL_REQUEST_DIAL); // request id
+	parcel_w_int32(&p, RIL_REQUEST_DIAL); // reply id
+	parcel_w_string(&p, number); // number to dial
+	parcel_w_int32(&p, 0); // clir mode
+	parcel_w_int32(&p, 0); // 0 - uus info absent, 1 - uus info present
+	parcel_w_int32(&p, 0); // 0 - uus info absent, 1 - uus info present
+	                       // yes, twice...??
 
 	send_ril_parcel(&p);
 	parcel_free(&p);
@@ -639,7 +686,7 @@ void activate_net(void)
 
 	parcel_init(&p);
 	parcel_w_int32(&p, RIL_REQUEST_SETUP_DATA_CALL); // request ID
-	parcel_w_int32(&p, RIL_REQUEST_SETUP_DATA_CALL); // seq number (?)
+	parcel_w_int32(&p, RIL_REQUEST_SETUP_DATA_CALL); // reply id
 	parcel_w_int32(&p, 7); // undocumented magic.
 	parcel_w_string(&p, "1"); // CDMA or GSM. 1 = GSM
 	parcel_w_string(&p, "0"); // data profile. 0 = default
@@ -657,8 +704,8 @@ void deactivate_net(void)
 	struct parcel p;
 	
 	parcel_init(&p);
-	parcel_w_int32(&p, RIL_REQUEST_DEACTIVATE_DATA_CALL);
-	parcel_w_int32(&p, RIL_REQUEST_DEACTIVATE_DATA_CALL);
+	parcel_w_int32(&p, RIL_REQUEST_DEACTIVATE_DATA_CALL); // request id
+	parcel_w_int32(&p, RIL_REQUEST_DEACTIVATE_DATA_CALL); // reply id
 	parcel_w_string(&p, "1"); // FIXME: this should be the CID returned by
 				  // RIL_REQUEST_SETUP_DATA_CALL response
 	send_ril_parcel(&p);
@@ -670,11 +717,11 @@ void send_sms(char *smsc_pdu, char *pdu)
 	struct parcel p;
 
 	parcel_init(&p);
-	parcel_w_int32(&p, RIL_REQUEST_SEND_SMS);
-	parcel_w_int32(&p, RIL_REQUEST_SEND_SMS);
-	parcel_w_int32(&p, 2);
-	parcel_w_string(&p, smsc_pdu);
-	parcel_w_string(&p, pdu);
+	parcel_w_int32(&p, RIL_REQUEST_SEND_SMS); // request id
+	parcel_w_int32(&p, RIL_REQUEST_SEND_SMS); // reply id
+	parcel_w_int32(&p, 2); // ??? java code does it
+	parcel_w_string(&p, smsc_pdu); // SMSC PDU
+	parcel_w_string(&p, pdu); // SMS PDU
 
 	send_ril_parcel(&p);
 	parcel_free(&p);
@@ -685,9 +732,9 @@ void acknowledge_sms(void)
 	struct parcel p;
 
 	parcel_init(&p);
-	parcel_w_int32(&p, RIL_REQUEST_SMS_ACKNOWLEDGE);
-	parcel_w_int32(&p, RIL_REQUEST_SMS_ACKNOWLEDGE);
-	parcel_w_int32(&p, 2);
+	parcel_w_int32(&p, RIL_REQUEST_SMS_ACKNOWLEDGE); // request id
+	parcel_w_int32(&p, RIL_REQUEST_SMS_ACKNOWLEDGE); // reply id
+	parcel_w_int32(&p, 2); // ??? java code does it
 	parcel_w_int32(&p, 1); // success
 	parcel_w_int32(&p, 0); // failure cause if necessary
 
@@ -700,8 +747,8 @@ void get_reg_state(void)
 	struct parcel p;
 	
 	parcel_init(&p);
-	parcel_w_int32(&p, RIL_REQUEST_REGISTRATION_STATE);
-	parcel_w_int32(&p, RIL_REQUEST_REGISTRATION_STATE);
+	parcel_w_int32(&p, RIL_REQUEST_REGISTRATION_STATE); // request id
+	parcel_w_int32(&p, RIL_REQUEST_REGISTRATION_STATE); // reply id
 	
 	send_ril_parcel(&p);
 	parcel_free(&p);
@@ -712,10 +759,10 @@ void set_mute(int muted)
 	struct parcel p;
 	
 	parcel_init(&p);
-	parcel_w_int32(&p, RIL_REQUEST_SET_MUTE);
-	parcel_w_int32(&p, RIL_REQUEST_SET_MUTE);
-	parcel_w_int32(&p, 1);
-	parcel_w_int32(&p, muted);
+	parcel_w_int32(&p, RIL_REQUEST_SET_MUTE); // request id
+	parcel_w_int32(&p, RIL_REQUEST_SET_MUTE); // reply id
+	parcel_w_int32(&p, 1); // ??? java code does this
+	parcel_w_int32(&p, muted); // 0 - unmute, 1 - mute
 
 	send_ril_parcel(&p);
 	parcel_free(&p);
@@ -726,8 +773,8 @@ void get_current_calls(void)
 	struct parcel p;
 
 	parcel_init(&p);
-	parcel_w_int32(&p, RIL_REQUEST_GET_CURRENT_CALLS);
-	parcel_w_int32(&p, RIL_REQUEST_GET_CURRENT_CALLS);
+	parcel_w_int32(&p, RIL_REQUEST_GET_CURRENT_CALLS); // request id
+	parcel_w_int32(&p, RIL_REQUEST_GET_CURRENT_CALLS); // reply id
 
 	send_ril_parcel(&p);
 	parcel_free(&p);
@@ -738,10 +785,10 @@ void hangup(int index)
 	struct parcel p;
 	
 	parcel_init(&p);
-	parcel_w_int32(&p, RIL_REQUEST_HANGUP);
-	parcel_w_int32(&p, RIL_REQUEST_HANGUP);
-	parcel_w_int32(&p, 1);
-	parcel_w_int32(&p, index);
+	parcel_w_int32(&p, RIL_REQUEST_HANGUP); // request id
+	parcel_w_int32(&p, RIL_REQUEST_HANGUP); // reply id
+	parcel_w_int32(&p, 1); // ??? java code does it, don't know why
+	parcel_w_int32(&p, index); // line index to hang up
 
 	send_ril_parcel(&p);
 	parcel_free(&p);
