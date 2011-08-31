@@ -65,7 +65,7 @@ task_cfg := array[] of {
 	"update",
 };
 
-init(ctxt: ref Draw->Context, nil: list of string)
+init(ctxt: ref Draw->Context, argv: list of string)
 {
 	sys = load Sys Sys->PATH;
 	draw = load Draw Draw->PATH;
@@ -94,6 +94,14 @@ init(ctxt: ref Draw->Context, nil: list of string)
 
 	phonech := chan of string;
 	spawn monitor(phonech);
+	spawn monitor_buttons();
+
+	if(len argv > 1) {
+		# we were given a number as an argument, start dialing
+		number := hd tl argv;
+		labeltext = number;
+		dial(number);
+	}
 
 	for(;;)	alt {
 	s := <-t.ctxt.kbd =>
@@ -151,8 +159,7 @@ init(ctxt: ref Draw->Context, nil: list of string)
 		dial(labeltext);
 		route(audio_route);
 		"hangup" =>
-		hangup(0);
-		phone_state = ACTIVE;
+		hangup_current();
 		"switch_route" =>
 		if(audio_route == EARPIECE) {
 			route(SPEAKER);
@@ -179,7 +186,6 @@ init(ctxt: ref Draw->Context, nil: list of string)
 
 route(path : int)
 {
-	str : string;
 	fd := sys->open("/phone/ctl", sys->OWRITE);
 	if(fd == nil) {
 		sys->fprint(sys->fildes(2), "could not open phone control device: %r\n");
@@ -192,6 +198,16 @@ route(path : int)
 	}
 }
 
+set_volume(volume : real)
+{
+	fd := sys->open("/phone/ctl", sys->OWRITE);
+	if(fd == nil) {
+		sys->fprint(sys->fildes(2), "could not open phone control device: %r\n");
+		return;
+	}
+	sys->fprint(fd, "volume %f", volume);
+}
+
 hangup(index : int)
 {
 	fd := sys->open("/phone/phone", sys->OWRITE);
@@ -199,8 +215,19 @@ hangup(index : int)
 		sys->fprint(sys->fildes(2), "could not open phone: %r\n");
 		return;
 	}
-	str := sys->sprint("hangup %d", index);
-	sys->write(fd, array of byte str, len (array of byte str));
+	sys->fprint(fd, "hangup %d", index);
+	phone_state = IDLE;
+}
+
+hangup_current()
+{
+	fd := sys->open("/phone/phone", sys->OWRITE);
+	if(fd == nil) {
+		sys->fprint(sys->fildes(2), "could not open phone: %r\n");
+		return;
+	}
+	sys->fprint(fd, "hangup");
+	phone_state = IDLE;
 }
 
 dial(number : string)
@@ -210,9 +237,37 @@ dial(number : string)
 		sys->fprint(sys->fildes(2), "could not open phone: %r\n");
 		return;
 	}
-	str := sys->sprint("dial %s", number);
-	sys->write(fd, array of byte str, len (array of byte str));
-	phone_state = ACTIVE;	
+	sys->fprint(fd, "dial %s", number);
+	phone_state = ACTIVE;
+}
+
+monitor_buttons()
+{
+	volume := 1.0;
+	fd := sys->open("/dev/buttons", sys->OREAD);
+	if(fd == nil) {
+		sys->fprint(sys->fildes(2), "could not open buttons: %r\n");
+		return;
+	}
+	for(;;) {
+		newstr : string;
+		buf := array[64] of byte;
+		n := sys->read(fd, buf, len buf);
+		buf = buf[:n];
+		str := string buf;
+		sys->print("%s\n", str);
+		if(rstrip(str) == "volume up press") {
+			if(volume < 1.0) {
+				volume += 0.1;
+				set_volume(volume);
+			}
+		} else if(rstrip(str) == "volume down press") {
+			if(volume > 0.0) {
+				volume -= 0.1;
+				set_volume(volume);
+			}
+		}
+	}
 }
 
 monitor(phonech : chan of string)

@@ -352,6 +352,11 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 					af_setParameters("routing=3");
 				}
 			}
+		} else if(strcmp(args[0], "volume") == 0) {
+			if(nargs >= 2) {
+				print("%f\n", strtof(args[1], NULL));
+				af_setVoiceVolume(strtof(args[1], NULL));
+			}
 		}
 		auditfree(str);
 		break;
@@ -393,12 +398,11 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 			}
 			dial(args[1]);
 		} else if(strcmp(args[0], "hangup") == 0) {
-			if(nargs != 2) {
-				fprintf(stderr, "malformed hangup request\n");
-				auditfree(str);
-				break;
+			if(nargs == 2) {
+				hangup(args[1]);
+			} else {
+				hangup_current();
 			}
-			hangup(atoi(args[1]));
 		}
 		auditfree(str);
 		break;
@@ -799,6 +803,18 @@ void hangup(int index)
 	parcel_w_int32(&p, RIL_REQUEST_HANGUP); // reply id
 	parcel_w_int32(&p, 1); // ??? java code does it, don't know why
 	parcel_w_int32(&p, index); // line index to hang up
+
+	send_ril_parcel(&p);
+	parcel_free(&p);
+}
+
+void hangup_current(void)
+{
+	struct parcel p;
+	
+	parcel_init(&p);
+	parcel_w_int32(&p, RIL_REQUEST_HANGUP_FOREGROUND_RESUME_BACKGROUND);
+	parcel_w_int32(&p, RIL_REQUEST_HANGUP_FOREGROUND_RESUME_BACKGROUND);
 
 	send_ril_parcel(&p);
 	parcel_free(&p);
