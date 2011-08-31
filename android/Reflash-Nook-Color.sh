@@ -26,7 +26,7 @@ cd ..
 rm repacked-ramdisk.gz
 
 echo Pushing the boot chooser
-adb push ./bootpicker/picker /data/picker
+adb push ../bootpicker/picker /data/picker
 
 echo Pushing inferno.sh to device
 adb push ../inferno.sh /system/bin/inferno.sh

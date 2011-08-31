@@ -37,6 +37,11 @@ main(int argc, char *argv[])
 		xres = 480;
 		yres = 800;
 		depth = 4;
+	} else if (!strncmp(device, "encore", 6)) {
+		mousefile = "/dev/input/event2";
+		xres = 1024;
+		yres = 600;
+		depth = 4;
 	} else {
 		printf("what device are you using? I'm outta here\n");
 		exit(1);
