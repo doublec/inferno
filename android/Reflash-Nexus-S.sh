@@ -14,7 +14,10 @@ adb pull /data/boot.img work/boot.img
 
 echo Pushing the startup script
 adb shell "mount -o remount,rw /system"
-adb push ./inferno-s.sh /system/bin/inferno.sh
+adb push ./inferno.sh /system/bin/inferno.sh
+
+echo Pushing the boot chooser
+adb push ./bootpicker/picker /data/picker
 
 echo Unpacking, modifying, and repacking the boot image
 cd work

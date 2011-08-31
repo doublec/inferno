@@ -241,7 +241,7 @@ main(int argc, char *argv[])
 	char *opt, *p;
 	char *enva[20];
 	int envc;
-	char *device[128]; // I think PROP_NAME_MAX is 96 so we're good
+	char device[128]; // I think PROP_NAME_MAX is 96 so we're good
 
 	quotefmtinstall();
 	savestartup(argc, argv);
