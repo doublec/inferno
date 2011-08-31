@@ -340,8 +340,18 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 			}
 		} else if(strcmp(args[0], "mute") == 0) {
 			set_mute(1);
-		} else if(strcmp(args[1], "unmute") == 0) {
+		} else if(strcmp(args[0], "unmute") == 0) {
 			set_mute(0);
+		} else if(strcmp(args[0], "route") == 0) {
+			if(nargs >= 2) {
+				if(strcmp(args[1], "earpiece") == 0) {
+					af_setParameters("routing=1");
+				} else if(strcmp(args[1], "speaker") == 0) {
+					af_setParameters("routing=2");
+				} else if(strcmp(args[1], "headphone") == 0) {
+					af_setParameters("routing=3");
+				}
+			}
 		}
 		auditfree(str);
 		break;

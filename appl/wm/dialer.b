@@ -22,6 +22,12 @@ Dialer: module {
 	init: fn(ctxt: ref Draw->Context, argv: list of string);
 };
 
+IDLE, RINGING, ACTIVE : con iota;
+phone_state := IDLE;
+
+EARPIECE, SPEAKER : con iota;
+audio_route := EARPIECE;
+
 task_cfg := array[] of {
 	"frame .fl -width 40w -height 40w",
 	"frame .b",
@@ -49,9 +55,10 @@ task_cfg := array[] of {
 	"pack .b.* .b.0 .b.# -in .row4 -side left -fill both -expand true",
 	"button .b.dial -height 50 -text Dial -command {send cmd dial}",
 	"button .b.hangup -height 50 -text {Hang up} -command {send cmd hangup}",
+	"button .b.switchroute -height 50 -text {Speaker} -command {send cmd switch_route}",
 	"pack .l .b.back",
 	"pack .row1 .row2 .row3 .row4 -fill both -in .b",
-	"pack .b.dial .b.hangup -fill both -in .b",
+	"pack .b.dial .b.hangup .b.switchroute -fill both -in .b",
 	"pack .b -fill both",
 	"pack .fl -fill both -expand 1",
 	"pack propagate . 0",
@@ -142,18 +149,46 @@ init(ctxt: ref Draw->Context, nil: list of string)
 		"dial" =>
 		sys->print("dialing %s\n", labeltext);
 		dial(labeltext);
+		route(audio_route);
 		"hangup" =>
-		hangup(1);
+		hangup(0);
+		phone_state = ACTIVE;
+		"switch_route" =>
+		if(audio_route == EARPIECE) {
+			route(SPEAKER);
+			audio_route = SPEAKER;
+			tk->cmd(t, ".b.switchroute configure -text Earpiece");
+		} else {
+			route(EARPIECE);
+			audio_route = EARPIECE;
+			tk->cmd(t, ".b.switchroute configure -text Speaker");
+		}
 		}
 		tk->cmd(t, ".l configure -text {" + labeltext + "}");
 		tk->cmd(t, "update");
 	phonemsg := <- phonech =>
 		case phonemsg {
 		"ring" =>
+			phone_state = RINGING;
 			sys->print("ring!");
 		}
 		tk->cmd(t, ".l configure -text {" + phonemsg +"}");
 		tk->cmd(t, "update");
+	}
+}
+
+route(path : int)
+{
+	str : string;
+	fd := sys->open("/phone/ctl", sys->OWRITE);
+	if(fd == nil) {
+		sys->fprint(sys->fildes(2), "could not open phone control device: %r\n");
+		return;
+	}
+	if(path == EARPIECE) {
+		sys->fprint(fd, "route earpiece");
+	} else {
+		sys->fprint(fd, "route speaker");
 	}
 }
 
@@ -176,7 +211,8 @@ dial(number : string)
 		return;
 	}
 	str := sys->sprint("dial %s", number);
-	sys->write(fd, array of byte str, len (array of byte str));	
+	sys->write(fd, array of byte str, len (array of byte str));
+	phone_state = ACTIVE;	
 }
 
 monitor(phonech : chan of string)
