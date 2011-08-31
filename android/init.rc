@@ -441,4 +441,4 @@ service dumpstate /system/bin/dumpstate -s
     oneshot
 
 # start inferno
-service inferno /system/bin/inferno-s.sh
+service inferno /system/bin/inferno.sh

@@ -17,7 +17,7 @@ gunzip -c uRamdisk.gz | cpio -i
 rm uRamdisk.gz
 
 echo Bringing in inferno-enabled init.rc
-cp ../../init.rc-c init.rc
+cp ../../init.rc init.rc
 
 echo Repacking ramdisk
 find . -regex "./.*"| cpio -ov -H newc | gzip > ../repacked-ramdisk.gz
@@ -26,7 +26,7 @@ cd ..
 rm repacked-ramdisk.gz
 
 echo Pushing inferno-c.sh to device
-adb push ../inferno-c.sh /system/bin/inferno-c.sh
+adb push ../inferno-c.sh /system/bin/inferno.sh
 adb push uRamdisk /boot/uRamdisk
 adb shell reboot
 
