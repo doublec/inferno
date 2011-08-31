@@ -190,6 +190,8 @@ void phoneinit(void)
 	if(ril_client_handle == NULL) {
 		fprintf(stderr, "opening libsecril-client.so failed: %s\n",
 			dlerror());
+		perror("couldn't load libsecril-client.so\n");
+		return;
 	}
 	openClientRILD = dlsym(ril_client_handle, "OpenClient_RILD");
 	disconnectRILD = dlsym(ril_client_handle, "Disconnect_RILD");
@@ -211,6 +213,9 @@ void phoneinit(void)
 
 static Chan *phoneattach(char *spec)
 {
+	if (ril_client == nil)
+		error(Enodev);
+
 	// setup kprocs if necessary
 	return devattach('f', spec);
 }

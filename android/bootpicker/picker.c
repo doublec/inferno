@@ -5,7 +5,7 @@
 #include <string.h>
 #include <linux/fb.h>
 #include <sys/mman.h>
-
+#include <linux/kd.h>
 /* Android thing */
 #include <cutils/properties.h>
 
@@ -14,7 +14,7 @@ main(int argc, char *argv[])
 {
 	char device[128]; // this should be bigger than PROP_NAME_MAX
 	char *mousefile;
-	int eventfd;
+	int eventfd, fd;
 	struct input_event ev[64];
 	fd_set set;
 	struct timeval timeout;
@@ -22,11 +22,38 @@ main(int argc, char *argv[])
 	int xres, yres, depth;
 	unsigned char* screen;
 	struct fb_fix_screeninfo fixedscreeninfo;
+	struct fb_var_screeninfo screeninfo_orig;
+	struct fb_var_screeninfo screeninfo_cur;
+
+	if (!access("/dev/tty0", F_OK)) {
+		fd = open("/dev/tty0", O_RDWR | O_SYNC);
+		if(fd < 0)
+			return -1;
+
+		if(ioctl(fd, KDSETMODE, (void*) KD_GRAPHICS)) {
+			close(fd);
+			return -1;
+		}
+	}
 
 	fb = open("/dev/graphics/fb0", O_RDWR);
 	if ( fb < 0 ) {
 		fprintf( 2, "can't open a file /dev/graphics/fb0" );
 		return -1;
+	}
+
+	if ( ioctl ( fb, FBIOGET_VSCREENINFO, &screeninfo_orig ) ) {
+		close ( fb );
+		fprintf ( 2, "can't get the variable screen info" );
+		return;
+	}
+
+	screeninfo_cur = screeninfo_orig;
+	screeninfo_cur.activate = FB_ACTIVATE_NOW;
+	screeninfo_cur.accel_flags = 0;
+	if ( ioctl ( fb, FBIOPUT_VSCREENINFO, &screeninfo_cur ) ) {
+		close ( fb );
+		return;
 	}
 
 	property_get("ro.product.device", device, "");
@@ -73,4 +100,6 @@ main(int argc, char *argv[])
 	}
 
 	memset(screen, 0x00, xres*yres*4);
+	close(eventfd);
+	close(fb);
 }
