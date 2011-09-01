@@ -32,6 +32,8 @@ echo Pushing inferno.sh to device
 adb push ../inferno.sh /system/bin/inferno.sh
 adb push uRamdisk /boot/uRamdisk
 
+cd ..
+
 echo Pushing the audio libraries
 adb push audio/libaudioflinger_inferno.so /system/lib/
 adb push audio/libinfernoaudio.so /system/lib
