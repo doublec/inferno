@@ -19,6 +19,13 @@ adb push ./inferno.sh /system/bin/inferno.sh
 echo Pushing the boot chooser
 adb push ./bootpicker/picker /data/picker
 
+echo Pushing the audio libraries
+adb push audio/libaudioflinger_inferno.so /system/lib/
+adb push audio/libinfernoaudio.so /system/lib
+
+echo Pushing the custom mediaserver
+adb push audio/mediaserver-inferno /system/bin
+
 echo Unpacking, modifying, and repacking the boot image
 cd work
 ../unpack-bootimg.pl boot.img

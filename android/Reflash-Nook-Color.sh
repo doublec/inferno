@@ -31,5 +31,13 @@ adb push ../bootpicker/picker /data/picker
 echo Pushing inferno.sh to device
 adb push ../inferno.sh /system/bin/inferno.sh
 adb push uRamdisk /boot/uRamdisk
+
+echo Pushing the audio libraries
+adb push audio/libaudioflinger_inferno.so /system/lib/
+adb push audio/libinfernoaudio.so /system/lib
+
+echo Pushing the custom mediaserver
+adb push audio/mediaserver-inferno /system/bin
+
 adb shell reboot
 
