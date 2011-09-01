@@ -158,6 +158,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		sys->print("dialing %s\n", labeltext);
 		dial(labeltext);
 		route(audio_route);
+		get_call_list();
 		"hangup" =>
 		hangup_current();
 		"switch_route" =>
@@ -285,6 +286,18 @@ monitor(phonech : chan of string)
 		str := string buf;
 		phonech <-= rstrip(str);
 	}
+}
+
+# Currently just throws away data. Only used to fix hangup bug.
+get_call_list()
+{
+	buf := array[256] of byte;
+	fd := sys->open("/phone/calls", sys->OREAD);
+	if(fd == nil) {
+		sys->fprint(sys->fildes(2), "could not open calls: %r\n");
+		return;
+	}
+	n := sys->read(fd, buf, len buf);
 }
 
 strstr(s, t : string) : int

@@ -53,6 +53,7 @@ TARG=\
 	sh.dis\
 	smenu.dis\
 	sms.dis\
+	dialer.dis\
 	snake.dis\
 	stopwatch.dis\
 	sweeper.dis\
