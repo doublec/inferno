@@ -25,8 +25,11 @@ find . -regex "./.*"| cpio -ov -H newc | gzip > ../repacked-ramdisk.gz
 cd ..
 rm repacked-ramdisk.gz
 
-echo Pushing inferno-c.sh to device
-adb push ../inferno-c.sh /system/bin/inferno.sh
+echo Pushing the boot chooser
+adb push ../bootpicker/picker /data/picker
+
+echo Pushing inferno.sh to device
+adb push ../inferno.sh /system/bin/inferno.sh
 adb push uRamdisk /boot/uRamdisk
 adb shell reboot
 

@@ -47,6 +47,7 @@ menu := array[] of {
 	"Manual", "wm/man",
 	"Shell", "wm/sh",
 	"Calendar", "wm/calendar",
+	"SMS", "wm/sms",
 	"->System", "folder:1",
 	"->Misc", "folder:2",
 	"->Games", "folder:3"

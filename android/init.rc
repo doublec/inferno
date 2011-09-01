@@ -304,6 +304,9 @@ on boot
 # Include extra init file
     import /system/etc/init.local.rc
 
+# Run the boot picker to choose which OS you want
+    exec /data/picker
+
 # Run sysinit
     exec /system/bin/sysinit
 
@@ -340,7 +343,7 @@ on property:persist.service.adb.enable=0
 service servicemanager /system/bin/servicemanager
     user system
     critical
-    #onrestart restart zygote
+    onrestart restart zygote
     onrestart restart media
 
 service vold /system/bin/vold
@@ -358,12 +361,13 @@ service ril-daemon /system/bin/rild
     user root
     group radio cache inet misc audio sdcard_rw net_admin net_raw
 
-#service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
-    #socket zygote stream 666
-    #onrestart write /sys/android_power/request_state wake
-    #onrestart write /sys/power/state on
-    #onrestart restart media
-    #onrestart restart netd
+service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
+    disabled
+    socket zygote stream 666
+    onrestart write /sys/android_power/request_state wake
+    onrestart write /sys/power/state on
+    onrestart restart media
+    onrestart restart netd
 
 service media /system/bin/mediaserver
     user media
@@ -442,3 +446,10 @@ service dumpstate /system/bin/dumpstate -s
 
 # start inferno
 service inferno /system/bin/inferno.sh
+	disabled
+
+on property:inferno.enabled=0
+    start zygote
+
+on property:inferno.enabled=1
+    start inferno
