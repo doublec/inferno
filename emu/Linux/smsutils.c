@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "smsutils.h"
-#include "audit.h"
 /* SMS-related functions */
 
 // writes UTF-8 translation to out and returns number of bytes written
@@ -125,17 +124,17 @@ char *hexify(char *bytes, size_t len)
 	int i, j;
 	char *ret;
 	for(i = 0; i < 256; i++) {
-		hexarray[i] = (char *) auditmalloc(3 * sizeof(char));
+		hexarray[i] = (char *) malloc(3 * sizeof(char));
 		snprintf(hexarray[i], 3, "%02x", i);
 	}
-	ret = (char *) auditmalloc((len * 2 + 1) * sizeof(char));
+	ret = (char *) malloc((len * 2 + 1) * sizeof(char));
 	for(i = 0, j = 0; i < len; i++, j += 2) {
 		ret[j] = hexarray[(unsigned char) bytes[i]][0];
 		ret[j + 1] = hexarray[(unsigned char) bytes[i]][1];
 	}
 	ret[j] = '\0';
 	for(i = 0; i < 256; i++) {
-		auditfree(hexarray[i]);
+		free(hexarray[i]);
 	}
 	return ret;
 }
@@ -156,9 +155,9 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 		fprintf(stderr, "malformed hex string passed to decode_sms\n");
 		return -1;
 	}
-	bytes = (char **) auditmalloc((len / 2) * sizeof(char *));
+	bytes = (char **) malloc((len / 2) * sizeof(char *));
 	for(i = 0; i < len / 2; i++) {
-		bytes[i] = (char *) auditmalloc(3 * sizeof(char));
+		bytes[i] = (char *) malloc(3 * sizeof(char));
 		bytes[i][0] = hexstr[i * 2];
 		bytes[i][1] = hexstr[i * 2 + 1];
 		bytes[i][2] = '\0';
@@ -170,7 +169,7 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 		fprintf(stderr, "unsupported number format for sender: %s",
 			bytes[1]);
 	}
-	service_center = auditmalloc((smsc_len*2 + 2) * sizeof(char));
+	service_center = malloc((smsc_len*2 + 2) * sizeof(char));
 	for(i = 2, j = 0; i < smsc_len + 1; i++, j += 2) {
 		// number is nibble-swapped
 		service_center[j] = bytes[i][1];
@@ -186,7 +185,7 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 
 	// next, decode the sender's number
 	src_len = strtol(bytes[curpos + 1], NULL, 16);
-	src_num = (char *) auditmalloc((src_len + 2) * sizeof(char));
+	src_num = (char *) malloc((src_len + 2) * sizeof(char));
 	// convert src_len from # of digits to # of bytes
 	src_len = (src_len % 2 == 0) ? src_len : src_len + 1;
 	src_len = src_len / 2;
@@ -210,7 +209,7 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 	// Timestamp
 	// TODO: may want to convert this to a time_t value as well
 	
-	timestamp = (char *) auditmalloc(15 * sizeof(char));
+	timestamp = (char *) malloc(15 * sizeof(char));
 	for(i = curpos + 2, j = 0; i < curpos + 9; i++, j += 2) {
 		// number is nibble-swapped
 		timestamp[j] = bytes[i][1];
@@ -228,7 +227,7 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 	}
 	// FIXME?
 	utf8msglen = UTFmax*161;
-	msg = (char *) auditmalloc((utf8msglen + 1) * sizeof(char));
+	msg = (char *) malloc((utf8msglen + 1) * sizeof(char));
 
 	// convert message to UTF-8
 	oldbits = 0;
@@ -255,9 +254,9 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 	sms->msg = msg;
 	// cleanup
 	for(i = 0; i < len / 2; i++) {
-		auditfree(bytes[i]);
+		free(bytes[i]);
 	}
-	auditfree(bytes);
+	free(bytes);
 	return 0;
 }
 
@@ -270,7 +269,7 @@ char *encode_sms(char *destnum, Rune *runemsg)
 	// dest_len is the hex representation of the length of the phone #
 	snprintf(dest_len, 3, "%02x", strlen(destnum));
 	actual_dest_len = (strlen(destnum) % 2 == 0) ? strlen(destnum) : strlen(destnum) + 1;
-	dest = (char *) auditmalloc((actual_dest_len + 1) * sizeof(char));
+	dest = (char *) malloc((actual_dest_len + 1) * sizeof(char));
 	for(i = 0; i < actual_dest_len; i += 2) {
 		if(destnum[i + 1] != '\0') {
 			dest[i] = destnum[i + 1];
@@ -282,7 +281,7 @@ char *encode_sms(char *destnum, Rune *runemsg)
 	dest[i] = '\0';
 //	printf("dest = %s\n", dest);
 
-	msg = auditmalloc(UTFmax * (runestrlen(runemsg) + 1) * sizeof(char));
+	msg = malloc(UTFmax * (runestrlen(runemsg) + 1) * sizeof(char));
 	for(i = 0, j = 0; i < runestrlen(runemsg); i++) {
 		j += rune_to_gsm(runemsg[i], msg + j);
 	}
@@ -290,7 +289,7 @@ char *encode_sms(char *destnum, Rune *runemsg)
 	msg_len = j;
 
 	enc_msg_len = msg_len - (msg_len / 8);
-	enc_msg = (char *) auditmalloc((enc_msg_len + 1) * sizeof(char));
+	enc_msg = (char *) malloc((enc_msg_len + 1) * sizeof(char));
 	for(i = 0, j = 0; i < msg_len; i++, j++) {
 		int numbits = (i + 1) % 8;
 		char bits;
@@ -306,11 +305,11 @@ char *encode_sms(char *destnum, Rune *runemsg)
 	}
 	final_msg = hexify(enc_msg, enc_msg_len);
 	ret_len = 14 + strlen(dest) + strlen(final_msg);
-	ret = (char *) auditmalloc((ret_len + 1) * sizeof(char));
+	ret = (char *) malloc((ret_len + 1) * sizeof(char));
 	// FIXME: too much of the sent msg is hardcoded
 	snprintf(ret, ret_len + 1, "0120%s91%s0000%02x%s", dest_len, dest, msg_len, final_msg);
-	auditfree(enc_msg);
-	auditfree(final_msg);
-	auditfree(dest);
+	free(enc_msg);
+	free(final_msg);
+	free(dest);
 	return ret;
 }

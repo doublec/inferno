@@ -33,9 +33,6 @@
 #include "alsa_audio.h"
 #include "smsutils.h"
 #include "parcel.h"
-// tmp
-#include "audit.h"
-//end tmp
 
 // RIL-related definitions
 
@@ -92,7 +89,6 @@ static int fd;
 static int power_state = 0;
 
 static struct {
-	QLock rl; // to prevent from waiting on rendez twice (causes a panic)
 	Rendez r;
 	int ready;
 	int used;
@@ -100,7 +96,6 @@ static struct {
 } status_msg;
 
 static struct {
-	QLock rl; // to prevent from waiting on rendez twice (causes a panic)
 	Rendez r;
 	int ready;
 	int used;
@@ -321,7 +316,7 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 		error(Eperm);
 	switch((ulong) c->qid.path) {
 	case Qctl:
-		str = auditmalloc((n + 1) * sizeof(char));
+		str = malloc((n + 1) * sizeof(char));
 		strncpy(str, va, n);
 		str[n] = '\0';
 		printf("Qctl: va = %s\n", str);
@@ -358,17 +353,17 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 				af_setVoiceVolume(strtof(args[1], NULL));
 			}
 		}
-		auditfree(str);
+		free(str);
 		break;
 	case Qsms:
-		str = auditmalloc((n + 1) * sizeof(char));
+		str = malloc((n + 1) * sizeof(char));
 		strncpy(str, va, n);
 		str[n] = '\0';
 		printf("Qsms: va = %s\n", str);
 		nargs = getfields(str, args, 3, 1, " ");
 		if(strcmp(args[0], "send") == 0) {
 			if(nargs == 3) {
-				runestr = auditmalloc((utflen(args[2]) + 1) * sizeof(Rune));
+				runestr = malloc((utflen(args[2]) + 1) * sizeof(Rune));
 				for(i = 0, j = 0; j < strlen(args[2]); i++) {
 					j += chartorune(runestr + i, args[2] + j);
 				}
@@ -376,14 +371,14 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 				pdu = encode_sms(args[1], runestr);
 				send_sms(NULL, pdu);
 				
-				auditfree(runestr);
-				auditfree(pdu);
+				free(runestr);
+				free(pdu);
 			}
 		}
-		auditfree(str);
+		free(str);
 		break;
 	case Qphone:
-		str = auditmalloc((n + 1) * sizeof(char));
+		str = malloc((n + 1) * sizeof(char));
 		strncpy(str, va, n);
 		str[n] = '\0';
 		printf("Qphone: va = %s\n", str);
@@ -393,7 +388,7 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 		} else if(strcmp(args[0], "dial") == 0) {
 			if(nargs != 2) {
 				fprintf(stderr, "malformed dial request\n");
-				auditfree(str);
+				free(str);
 				break;
 			}
 			dial(args[1]);
@@ -404,7 +399,7 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 				hangup_current();
 			}
 		}
-		auditfree(str);
+		free(str);
 		break;
 	}
 	return n;
@@ -487,8 +482,8 @@ void handle_sol_response(struct parcel *p)
 		for(i = 0; i < num; i++) {
 			offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", parcel_r_string(p));
 		}
-		auditfree(status_msg.msg);
-		status_msg.msg = auditstrdup(buf);
+		free(status_msg.msg);
+		status_msg.msg = strdup(buf);
 		status_msg.ready = 1;
 		Wakeup(&status_msg.r);
 		break;
@@ -504,14 +499,14 @@ void handle_sol_response(struct parcel *p)
 		}
 
 		for(i = 0; i < calls.num; i++) {
-			auditfree(calls.cs[i].number);
-			auditfree(calls.cs[i].name);
-			auditfree(calls.cs[i].uusInfo);
+			free(calls.cs[i].number);
+			free(calls.cs[i].name);
+			free(calls.cs[i].uusInfo);
 		}
-		auditfree(calls.cs);
+		free(calls.cs);
 		num = parcel_r_int32(p);
 		calls.num = num;
-		calls.cs = auditmalloc(num * sizeof(RIL_Call));
+		calls.cs = malloc(num * sizeof(RIL_Call));
 		if(calls.cs == NULL) {
 			fprintf(stderr, "malloc failed while making %d RIL_Calls\n", num);
 			calls.ready = -1;
@@ -533,7 +528,7 @@ void handle_sol_response(struct parcel *p)
 			calls.cs[i].name = parcel_r_string(p);
 			calls.cs[i].namePresentation = parcel_r_int32(p);
 			calls.cs[i].uusInfo = parcel_r_int32(p) ?
-					      auditmalloc(sizeof(RIL_UUS_Info)) :
+					      malloc(sizeof(RIL_UUS_Info)) :
 					      NULL;
 			if(calls.cs[i].uusInfo != NULL) {
 				// FIXME not implemented yet
@@ -564,13 +559,12 @@ void handle_unsol_response(struct parcel *p)
 		buf[l] = '\0';
 		qproduce(smsq, buf, strlen(buf));
 
-		auditfree(sms.msg);
-		auditfree(sms.service_center);
-		auditfree(sms.src_num);
-		auditfree(sms.timestamp);
+		free(sms.msg);
+		free(sms.service_center);
+		free(sms.src_num);
+		free(sms.timestamp);
 		break;
 	case RIL_UNSOL_CALL_RING:
-		printf("incoming call\n");
 		qproduce(phoneq, "ring\n", 5);
 		break;
 	case RIL_UNSOL_SIGNAL_STRENGTH:
@@ -599,7 +593,7 @@ void loop_for_data(void *v)
 			return;
 		}
 		msglen = ntohl(msglen);
-		buf = (char *) auditmalloc(msglen * sizeof(char));
+		buf = (char *) malloc(msglen * sizeof(char));
 		if(buf == NULL) {
 			fprintf(stderr, "devphone:loop_for_data: malloc failed when attempting to allocate %d bytes\n", msglen);
 			return;
@@ -610,7 +604,7 @@ void loop_for_data(void *v)
 				readlen);
 			fprintf(stderr,
 				"got too much or not enough data, aborting\n");
-			auditfree(buf);
+			free(buf);
 			return;
 		}
 		/*	for(i = 0; i < readlen; i++) {
@@ -628,7 +622,7 @@ void loop_for_data(void *v)
 			handle_unsol_response(&p);
 		}
 		parcel_free(&p);
-		auditfree(buf);
+		free(buf);
 	}
 }
 

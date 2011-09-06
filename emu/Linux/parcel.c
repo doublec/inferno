@@ -2,7 +2,6 @@
 #include <sys/types.h>
 #include <cutils/jstring.h>
 #include <string.h>
-#include "audit.h"
 #include <endian.h>
 
 #define PAD_SIZE(s) (((s)+3)&~3)
@@ -16,7 +15,7 @@ struct parcel {
 
 int parcel_init(struct parcel *p)
 {
-	p->data = auditmalloc(sizeof(int32_t)); // arbitrary size to start with
+	p->data = malloc(sizeof(int32_t)); // arbitrary size to start with
 	if(p->data == NULL) return -1;
 	p->size = 0;
 	p->capacity = sizeof(int32_t);
@@ -26,7 +25,7 @@ int parcel_init(struct parcel *p)
 
 int parcel_grow(struct parcel *p, size_t size)
 {
-	char *new = auditrealloc(p->data, p->capacity + size);
+	char *new = realloc(p->data, p->capacity + size);
 
 	if(new == NULL) {
 		return -1;
@@ -38,7 +37,7 @@ int parcel_grow(struct parcel *p, size_t size)
 
 void parcel_free(struct parcel *p)
 {
-	auditfree(p->data);
+	free(p->data);
 	p->size = 0;
 	p->capacity = 0;
 	p->offset = 0;
@@ -84,7 +83,7 @@ int parcel_w_string(struct parcel *p, char *str)
 		return 0;
 	}
 	s16_len = strlen8to16(str);
-	s16 = auditmalloc(sizeof(char16_t) * s16_len);
+	s16 = malloc(sizeof(char16_t) * s16_len);
 	strcpy8to16(s16, str, &s16_len);
 	if(parcel_w_int32(p, s16_len) == -1) {
 		return -1;
@@ -120,12 +119,12 @@ int parcel_w_string(struct parcel *p, char *str)
 		} else {
 			// Grow data and retry
 			if(parcel_grow(p, padded) == -1) {
-				auditfree(s16);
+				free(s16);
 				return -1;
 			}
 		}
 	}
-	auditfree(s16);
+	free(s16);
 	return 0;
 }
 
@@ -136,7 +135,7 @@ char *parcel_r_string(struct parcel *p)
 	size_t len8;
 	if(len16 < 0) return NULL; // this is how a null string is sent
 	len8 = strnlen16to8((char16_t *) (p->data + p->offset), len16);
-	ret = auditmalloc(len8 + 1);
+	ret = malloc(len8 + 1);
 	if(ret == NULL) return NULL;
 	strncpy16to8(ret, (char16_t *) (p->data + p->offset), len16);
 	p->offset += PAD_SIZE((len16 + 1) * sizeof(char16_t));
