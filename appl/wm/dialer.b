@@ -244,7 +244,7 @@ dial(number : string)
 
 monitor_buttons()
 {
-	volume := 1.0;
+	volume := 10;
 	fd := sys->open("/dev/buttons", sys->OREAD);
 	if(fd == nil) {
 		sys->fprint(sys->fildes(2), "could not open buttons: %r\n");
@@ -256,16 +256,15 @@ monitor_buttons()
 		n := sys->read(fd, buf, len buf);
 		buf = buf[:n];
 		str := string buf;
-		sys->print("%s\n", str);
 		if(rstrip(str) == "volume up press") {
-			if(volume < 1.0) {
-				volume += 0.1;
-				set_volume(volume);
+			if(volume < 10) {
+				volume += 1;
+				set_volume(real volume / 10.0);
 			}
 		} else if(rstrip(str) == "volume down press") {
-			if(volume > 0.0) {
-				volume -= 0.1;
-				set_volume(volume);
+			if(volume > 0) {
+				volume -= 1;
+				set_volume(real volume / 10.0);
 			}
 		}
 	}

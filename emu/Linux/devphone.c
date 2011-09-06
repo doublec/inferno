@@ -349,8 +349,7 @@ static long phonewrite(Chan *c, void *va, long n, vlong offset)
 			}
 		} else if(strcmp(args[0], "volume") == 0) {
 			if(nargs >= 2) {
-				print("%f\n", strtof(args[1], NULL));
-				af_setVoiceVolume(strtof(args[1], NULL));
+				af_setVoiceVolume(strtod(args[1], NULL));
 			}
 		}
 		free(str);

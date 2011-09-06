@@ -148,6 +148,7 @@ void add_event_queue(Queue *q)
 void del_event_queue(Queue *q)
 {
 	struct event_queue *cur, *prev;
+
 	prev = NULL;
 	for(cur = event_queue_head; cur != NULL; cur = cur->next) {
 		if(cur->q == q) {
