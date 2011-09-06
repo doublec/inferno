@@ -112,11 +112,65 @@ static struct
 	int	count;
 } kbd;
 
+struct event_queue {
+	Queue *q;
+	struct event_queue *next;
+};
+
+static struct event_queue *event_queue_head = NULL;
+
 #ifndef __linux__
 void eventslave(void *a) {
 	fprintf(stderr, "Events device currently only supported under Linux hosts\n");
 }
 #endif
+
+void add_event_queue(Queue *q)
+{
+	struct event_queue *node = malloc(sizeof(struct event_queue));
+
+	node->next = NULL;
+	node->q = q;
+
+	if(event_queue_head == NULL) {
+		event_queue_head = node;
+	} else {
+		struct event_queue *cur;
+		for(cur = event_queue_head; ; cur = cur->next) {
+			if(cur->next == NULL) {
+				cur->next = node;
+				break;
+			}
+		}
+	}
+}
+
+void del_event_queue(Queue *q)
+{
+	struct event_queue *cur, *prev;
+	prev = NULL;
+	for(cur = event_queue_head; cur != NULL; cur = cur->next) {
+		if(cur->q == q) {
+			if(prev != NULL) {
+				prev->next = cur->next;
+			} else {
+				event_queue_head = cur->next;
+			}
+			free(cur);
+			break;
+		}
+		prev = cur;
+	}
+}
+
+// Send a message to all queues in the event queue list
+void event_queue_produce(char *str)
+{
+	struct event_queue *cur;
+	for(cur = event_queue_head; cur != NULL; cur = cur->next) {
+		qproduce(cur->q, str, strlen(str));
+	}
+}
 
 void
 kbdslave(void *a)
@@ -187,9 +241,6 @@ consinit(void)
 		panic("no memory");
 	gkbdq = qopen(512, 0, nil, nil);
 	if(gkbdq == 0)
-		panic("no memory");
-	eventq = qopen(512, 0, nil, nil);
-	if(eventq == 0)
 		panic("no memory");
 	batteryq = qopen(512, 0, nil, nil);
 	if(batteryq == 0)
@@ -296,9 +347,8 @@ consopen(Chan *c, int omode)
 		c->iounit = qiomaxatomic;
 		break;
 	case Qevents:
-		qflush(eventq); /* prevent reader from seeing old
-				    button presses -- there's 
-				    probably a better way*/
+		c->aux = qopen(512, 0, nil, nil);
+		add_event_queue(c->aux);
 		break;
 	}
 	return c;
@@ -331,6 +381,11 @@ consclose(Chan *c)
 		qfree(kprintq.q);
 		kprintq.q = nil;
 		wunlock(&kprintq.l);
+		break;
+	case Qevents:
+		del_event_queue(c->aux);
+		qfree(c->aux);
+		c->aux = NULL;
 		break;
 	}
 }
@@ -454,7 +509,7 @@ consread(Chan *c, void *va, long n, vlong offset)
 		return qread(gkbdq, va, n);
 
 	case Qevents:
-		return qread(eventq, va, n);
+		return qread(c->aux, va, n);
 
 	case Qkprint:
 		rlock(&kprintq.l);
