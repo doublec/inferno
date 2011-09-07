@@ -1,0 +1,6 @@
+Me: This is a sample conversation.
+Them: The SMS daemon listens for incoming messages and then places them in this file.
+Them: Messages are listed one per line.
+Me: The daemon prepends "Them: " to received messages.
+Me: This string can be replaced in the client by the sender's name if desired, later.
+Them: The client used to send messages should prepend "Me: " to messages it sends, then add them to this file.
