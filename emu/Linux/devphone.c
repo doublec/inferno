@@ -5,9 +5,7 @@
    consider notifying RIL of screen state using RIL_REQUEST_SCREEN_STATE to conserve power
    too many assumptions made in loop_for_data() about read() giving exactly the right amount of data
    parcel code will go crazy if ints overflow
-   no way to give an error if SMSes don't send
    need to support DTMF
-   get calling number when ring event occurs (through CALL_STATE_CHANGED?)
 */
 
 #include "dat.h"
@@ -440,7 +438,7 @@ Dev phonedevtab = {
 void handle_error(int seq, int error)
 {
 	// RIL error messages
-	char *errmsgs[] = { "no error", "radio not available", "generic failure", "password incorrect", "need SIM PIN2", "need SIM PUK2", "request not supported", "cancelled", "cannot access network during voice calls", "cannot access network before registering to network", "retry sending sms", "no SIM", "no subscription", "mode not supported", "FDN list check failed", "illegal SIM or ME" };
+	char *errmsgs[] = { "error: no error", "error: radio not available", "error: generic failure", "error: password incorrect", "error: need SIM PIN2", "error: need SIM PUK2", "error: request not supported", "error: cancelled", "error: cannot access network during voice calls", "error: cannot access network before registering to network", "error: retry sending sms", "error: no SIM", "error: no subscription", "error: mode not supported", "error: FDN list check failed", "error: illegal SIM or ME" };
 	char *errmsg = errmsgs[error];
 	switch(seq) {
 	case RIL_REQUEST_SEND_SMS:
@@ -588,6 +586,10 @@ void handle_unsol_response(struct parcel *p)
 		signal_strength = parcel_r_int32(p);
 		// TODO: use bit error rate instead of cell tower reception
 		// when available (during a call)
+		break;
+	case RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED:
+		print("call state changed\n");
+		qproduce(phoneq, "call state changed\n", 20);
 		break;
 	}
 }

@@ -32,9 +32,6 @@ Call : adt {
 
 call := Call("inactive", "");
 
-IDLE, RINGING, ACTIVE : con iota;
-phone_state := IDLE;
-
 EARPIECE, SPEAKER : con iota;
 audio_route := EARPIECE;
 
@@ -106,10 +103,8 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	tkclient->startinput(t, "kbd"::"ptr"::nil);
 
 	phonech := chan of string;
-	callsch := chan of string;
 	spawn monitor_phone(phonech);
 	spawn monitor_buttons();
-	spawn monitor_calls(callsch);
 
 	if(len argv > 1) {
 		# we were given a number as an argument, start dialing
@@ -117,6 +112,8 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		labeltext = number;
 		dial(number);
 	}
+
+	update_call_list();
 
 	for(;;)	alt {
 	s := <-t.ctxt.kbd =>
@@ -173,7 +170,6 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		sys->print("dialing %s\n", labeltext);
 		dial(labeltext);
 		route(audio_route);
-		get_call_list();
 		"answer" =>
 		answer();
 		route(audio_route);
@@ -193,20 +189,20 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		tk->cmd(t, ".number configure -text {" + labeltext + "}");
 		tk->cmd(t, "update");
 	phonemsg := <- phonech =>
+		sys->print("phonemsg: %s\n", phonemsg);
 		case phonemsg {
 		"ring" =>
-			phone_state = RINGING;
-			sys->print("ring!");
+			sys->print("ring!\n");
+		"call state changed" =>
+			update_call_list();
+			tk->cmd(t, ".status configure -text {" + call.state + " (" + call.number + ")}");
+			if(call.state == "incoming") {
+				tk->cmd(t, ".b.dial configure -text Answer -command {send cmd answer}");
+			} else {
+				tk->cmd(t, ".b.dial configure -text Dial -command {send cmd dial}");
+			}			
 		}
 		tk->cmd(t, ".number configure -text {" + phonemsg +"}");
-		tk->cmd(t, "update");
-	nil = <- callsch =>
-		tk->cmd(t, ".status configure -text {" + call.state + " (" + call.number + ")}");
-		if(call.state == "incoming") {
-			tk->cmd(t, ".b.dial configure -text Answer -command {send cmd answer}");
-		} else {
-			tk->cmd(t, ".b.dial configure -text Dial -command {send cmd dial}");
-		}
 		tk->cmd(t, "update");
 	}
 }
@@ -244,7 +240,6 @@ hangup(index : int)
 		return;
 	}
 	sys->fprint(fd, "hangup %d", index);
-	phone_state = IDLE;
 }
 
 # Hang up the current call and resume the background call if present.
@@ -256,7 +251,6 @@ hangup_current()
 		return;
 	}
 	sys->fprint(fd, "hangup");
-	phone_state = IDLE;
 }
 
 dial(number : string)
@@ -267,7 +261,6 @@ dial(number : string)
 		return;
 	}
 	sys->fprint(fd, "dial %s", number);
-	phone_state = ACTIVE;
 }
 
 answer()
@@ -278,7 +271,6 @@ answer()
 		return;
 	}
 	sys->fprint(fd, "answer");
-	phone_state = ACTIVE;
 }
 
 # Read /dev/buttons to look for volume up/volume down events.
@@ -326,52 +318,9 @@ monitor_phone(phonech : chan of string)
 	}
 }
 
-# Polls the call list (a list of active, held, and waiting calls).
-monitor_calls(ch : chan of string)
-{
-	buf := array[256] of byte;
-	for(;;) {
-		fd := sys->open("/phone/calls", sys->OREAD);
-		if(fd == nil) {
-			sys->fprint(sys->fildes(2), "could not open calls: %r\n");
-			return;
-		}
-		n := sys->read(fd, buf, len buf);
-		if(n == 0) {
-			# we read 0 bytes, meaning no calls
-			phone_state = IDLE;
-			call.state = "inactive";
-			call.number = "";
-		} else {
-			buf := string buf;
-			(re, nil) := regex->compile("state (.*)\n", 1);
-			a := regex->execute(re, buf);
-			(bgn, end) := a[1];
-			state := buf[bgn:end];
-			case state {
-				"0" => call.state = "active";
-				"1" => call.state = "holding";
-				"2" => call.state = "dialing";
-				"3" => call.state = "alerting";
-				"4" => call.state = "incoming";
-				"5" => call.state = "waiting";
-			}
-
-			(re, nil) = regex->compile("number (.*)\n", 1);
-			a = regex->execute(re, buf);
-			(bgn, end) = a[1];
-			number := buf[bgn:end];
-			call.number = number;
-		}
-		sys->print("state %s number %s\n", call.state, call.number);
-		ch <-= "update";
-		sys->sleep(1000);
-	}
-}
-
-# Get the call list (a list of active, held, and waiting calls).
-# Currently just throws away data. Only used to fix hangup bug.
-get_call_list()
+# Gets the call list (a list of active, held, and waiting calls).
+# Currently only worries about one call since that makes things easier.
+update_call_list()
 {
 	buf := array[256] of byte;
 	fd := sys->open("/phone/calls", sys->OREAD);
@@ -380,6 +329,31 @@ get_call_list()
 		return;
 	}
 	n := sys->read(fd, buf, len buf);
+	if(n == 0) {
+		# we read 0 bytes, meaning no calls
+		call.state = "inactive";
+		call.number = "";
+	} else {
+		buf := string buf;
+		(re, nil) := regex->compile("state (.*)\n", 1);
+		a := regex->execute(re, buf);
+		(bgn, end) := a[1];
+		state := buf[bgn:end];
+		case state {
+			"0" => call.state = "active";
+			"1" => call.state = "holding";
+			"2" => call.state = "dialing";
+			"3" => call.state = "alerting";
+			"4" => call.state = "incoming";
+			"5" => call.state = "waiting";
+		}
+			(re, nil) = regex->compile("number (.*)\n", 1);
+		a = regex->execute(re, buf);
+		(bgn, end) = a[1];
+		number := buf[bgn:end];
+		call.number = number;
+	}
+	sys->print("state %s number %s\n", call.state, call.number);
 }
 
 strstr(s, t : string) : int
@@ -400,7 +374,7 @@ strstr(s, t : string) : int
 rstrip(s : string) : string
 {
 	for(i := len s - 1; i >= 0; i--) {
-		if(!str->in(s[i], "\r\n \t")) {
+		if(!str->in(s[i], "\r\n \t\0")) {
 			return s[0:i + 1];
 		}
 	}

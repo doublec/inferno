@@ -26,11 +26,8 @@ OBJ=\
 	framebuffer.$O\
 	devevents.$O\
 	devphone.$O\
-	alsa_pcm.$O\
-	alsa_mixer.$O\
 	parcel.$O\
 	smsutils.$O\
-	audit.$O\
 	$CONF.root.$O\
 	lock.$O\
 	$DEVS\
