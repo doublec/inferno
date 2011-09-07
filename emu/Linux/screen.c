@@ -117,6 +117,7 @@ touchscreenc(struct input_event* ev, int count)
     }
 }
 
+static void 
 touchscreene(struct input_event* ev, int count)
 {
     int i;
@@ -162,6 +163,7 @@ touchscreene(struct input_event* ev, int count)
     }
 }
 
+static void 
 touchscreens(struct input_event* ev, int count)
 {
     int i;
@@ -222,8 +224,10 @@ touchscreens(struct input_event* ev, int count)
     }
 }
 
-static void fbreadmousec(void* v)
+static void 
+fbreadmouse(void* v)
 {
+	void (*handler)(struct input_event*, int) = v;
 	int rd, value, size = sizeof(struct input_event);
 	struct input_event ev[64];
 	int i;
@@ -233,41 +237,12 @@ static void fbreadmousec(void* v)
 			sleep(1);
 		}
 
-		touchscreenc(ev, (rd / size));
+		(*handler)(ev, (rd / size));
 	}
 }
 
-static void fbreadmousee(void* v)
-{
-	int rd, value, size = sizeof(struct input_event);
-	struct input_event ev[64];
-	int i;
-	while (1){
-		if ((rd = read (eventfd, ev, sizeof(ev))) < size) {
-			print("read %d instead of %d\n", rd, size);
-			sleep(1);
-		}
-
-		touchscreene(ev, (rd / size));
-	}
-}
-
-static void fbreadmouses(void* v)
-{
-	int rd, value, size = sizeof(struct input_event);
-	struct input_event ev[64];
-	int i;
-	while (1){
-		if ((rd = read (eventfd, ev, sizeof(ev))) < size) {
-			print("read %d instead of %d\n", rd, size);
-			sleep(1);
-		}
-
-		touchscreens(ev, (rd / size));
-	}
-}
-
-static void readbutton(void* v)
+static void 
+readbutton(void* v)
 {
 	int rd, value, size = sizeof(struct input_event);
 	struct input_event ev[64];
@@ -324,7 +299,8 @@ static void readbutton(void* v)
 	}
 }
 
-static void readhomebutton(void* v)
+static void 
+readhomebutton(void* v)
 {
 	int rd, value, size = sizeof(struct input_event);
 	struct input_event ev[64];
@@ -343,7 +319,8 @@ static void readhomebutton(void* v)
     }
 }
 
-static void readvolbutton(void* v)
+static void 
+readvolbutton(void* v)
 {
 	int rd, value, size = sizeof(struct input_event);
 	struct input_event ev[64];
@@ -371,7 +348,8 @@ static void readvolbutton(void* v)
     }
 }
 
-uchar* attachscreen ( Rectangle *rect, ulong *chan, int *depth, int *width, int *softscreen )
+uchar* 
+attachscreen ( Rectangle *rect, ulong *chan, int *depth, int *width, int *softscreen )
 {
     Xsize &= ~0x3;	/* ensure multiple of 4 */
     rect->min.x = 0;
@@ -398,18 +376,12 @@ uchar* attachscreen ( Rectangle *rect, ulong *chan, int *depth, int *width, int 
 	eventfd = open(mousefile, O_RDONLY);
 	if (type == 'c') {
 		//for Nook Color
-		xmin = 2;
-		xadjust = 0; //shifts mouse left
-		lowx = xmin + xadjust;
-		ymin = 2;
-		yadjust = 5; //shifts mouse up
-		lowy = ymin + yadjust;
-		kproc("readmouse", fbreadmousec, nil, 0);
+		kproc("readmouse", fbreadmouse, &touchscreenc, 0);
 	}
 	else if (type == 'e')
-		kproc("readmouse", fbreadmousee, nil, 0);
+		kproc("readmouse", fbreadmouse, &touchscreene, 0);
 	else
-		kproc("readmouse", fbreadmouses, nil, 0);
+		kproc("readmouse", fbreadmouse, &touchscreens, 0);
 
 	sprintf(mainbuttoninput, "/dev/input/event%d", maineventnum);
 	mainbuttonfd = open(mainbuttoninput, O_RDONLY);
@@ -431,7 +403,8 @@ uchar* attachscreen ( Rectangle *rect, ulong *chan, int *depth, int *width, int 
     return screendata;
 }
 
-void detachscreen ()
+void 
+detachscreen ()
 {
     free ( screendata );
     screendata = 0;
@@ -443,7 +416,8 @@ void detachscreen ()
 #define max(a,b) (((a)>(b))?(a):(b))
 #define min(a,b) (((a)<(b))?(a):(b))
 
-void flushmemscreen ( Rectangle rect )
+void 
+flushmemscreen ( Rectangle rect )
 {
     if ( !framebuffer || !screendata )
 	return;
@@ -510,7 +484,8 @@ void flushmemscreen ( Rectangle rect )
 }
 #include "arrows.h"
 
-static void initscreen ( int aXSize, int aYSize, ulong *chan, int *depth )
+static void 
+initscreen ( int aXSize, int aYSize, ulong *chan, int *depth )
 {
     if ( framebuffer_init () )
 	return;
@@ -538,7 +513,8 @@ static void initscreen ( int aXSize, int aYSize, ulong *chan, int *depth )
     }
 }
 
-void setpointer ( int x, int y )
+void 
+setpointer ( int x, int y )
 {
     if ( !framebuffer || !screendata )
 	return;
@@ -587,7 +563,8 @@ void setpointer ( int x, int y )
     }
 }
 
-void drawpointer ( int x, int y )
+void 
+drawpointer ( int x, int y )
 {
     uchar i,j;
     uchar depth = displaydepth / 8;
