@@ -30,7 +30,6 @@
 #include <semaphore.h>
 #include <dlfcn.h>
 #include "asound.h"
-#include "alsa_audio.h"
 #include "smsutils.h"
 #include "parcel.h"
 
