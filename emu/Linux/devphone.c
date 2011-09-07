@@ -89,6 +89,7 @@ static int fd;
 static int power_state = 0;
 
 static struct {
+	QLock rl;
 	Rendez r;
 	int ready;
 	int used;
@@ -96,6 +97,7 @@ static struct {
 } status_msg;
 
 static struct {
+	QLock rl;
 	Rendez r;
 	int ready;
 	int used;
@@ -161,9 +163,11 @@ void phoneinit(void)
 	calls.num = 0;
 	calls.ready = 0;
 	calls.used = 0;
-	
+	memset(&calls.rl, 0, sizeof(QLock));
+
 	status_msg.ready = 0;
 	status_msg.used = 0;
+	memset(&status_msg.rl, 0, sizeof(QLock));
 	phoneq = qopen(512, 0, nil, nil);
 	if(phoneq == 0)
 		panic("no memory");
@@ -220,9 +224,15 @@ static Chan *phoneopen(Chan *c, int omode)
 
 	switch((ulong) c->qid.path) {
 	case Qstatus:
+		qlock(&status_msg.rl);
+		status_msg.used = 0;
+		status_msg.ready = 0;
 		get_reg_state();
 		break;
 	case Qcalls:
+		qlock(&calls.rl);
+		calls.used = 0;
+		calls.ready = 0;
 		get_current_calls();
 		break;
 	}
@@ -261,6 +271,7 @@ static long phoneread(Chan *c, void *va, long n, vlong offset)
 		if(status_msg.ready == -1) {
 			// an error occurred
 			status_msg.used = 1;
+			qunlock(&status_msg.rl);
 			return readstr(offset, va, n, "error\n");
 		}
 		if(status_msg.used) {
@@ -275,11 +286,13 @@ static long phoneread(Chan *c, void *va, long n, vlong offset)
 		if(calls.ready == -1) {
 			// an error occurred
 			calls.used = 1;
-			return readstr(offset, va, n, "error\n");
+			qunlock(&calls.rl);
+			return readstr(offset, va, n, "");
 		}
-		if(calls.used) {
+		if(calls.used || calls.num == 0) {
 			calls.ready = 0;
 			calls.used = 0;
+			qunlock(&calls.rl);
 			return 0; // already sent the data
 		}
 		calls.used = 1;
@@ -299,6 +312,7 @@ static long phoneread(Chan *c, void *va, long n, vlong offset)
 					       c.numberPresentation, c.name,
 					       c.namePresentation);
 		}
+		qunlock(&calls.rl);
 		return str_offset;
 	}
 	return 0;
@@ -440,10 +454,12 @@ void handle_error(int seq, int error)
 	case RIL_REQUEST_REGISTRATION_STATE:
 		status_msg.ready = -1;
 		Wakeup(&status_msg.r);
+		qunlock(&status_msg.rl);
 		break;
 	case RIL_REQUEST_GET_CURRENT_CALLS:
 		calls.ready = -1;
 		Wakeup(&calls.r);
+		qunlock(&calls.rl);
 		break;
 	}
 }
@@ -485,6 +501,7 @@ void handle_sol_response(struct parcel *p)
 		status_msg.msg = strdup(buf);
 		status_msg.ready = 1;
 		Wakeup(&status_msg.r);
+		qunlock(&status_msg.rl);
 		break;
 	case RIL_REQUEST_DIAL:
 		printf("got RIL_REQUEST_DIAL success\n");
@@ -494,6 +511,7 @@ void handle_sol_response(struct parcel *p)
 			calls.ready = 1;
 			calls.num = 0;
 			Wakeup(&calls.r);
+			qunlock(&calls.rl);
 			break;
 		}
 
@@ -510,6 +528,7 @@ void handle_sol_response(struct parcel *p)
 			fprintf(stderr, "malloc failed while making %d RIL_Calls\n", num);
 			calls.ready = -1;
 			Wakeup(&calls.r);
+			qunlock(&calls.rl);
 			break;
 		}
 
@@ -536,6 +555,7 @@ void handle_sol_response(struct parcel *p)
 		}
 		calls.ready = 1;
 		Wakeup(&calls.r);
+		qunlock(&calls.rl);
 		break;
 	}
 }

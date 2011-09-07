@@ -18,9 +18,19 @@ include "dialog.m";
 include "string.m";
 	str: String;
 
+include "regex.m";
+	regex: Regex;
+
 Dialer: module {
 	init: fn(ctxt: ref Draw->Context, argv: list of string);
 };
+
+Call : adt {
+	state : string;
+	number : string;
+};
+
+call := Call("inactive", "");
 
 IDLE, RINGING, ACTIVE : con iota;
 phone_state := IDLE;
@@ -73,6 +83,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	tkclient = load Tkclient Tkclient->PATH;
 	dialog = load Dialog Dialog->PATH;
 	str = load String String->PATH;
+	regex = load Regex Regex->PATH;
 
 	labeltext := "";
 
@@ -93,8 +104,10 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	tkclient->startinput(t, "kbd"::"ptr"::nil);
 
 	phonech := chan of string;
+	calllistch := chan of string;
 	spawn monitor(phonech);
 	spawn monitor_buttons();
+	spawn monitor_calls(calllistch);
 
 	if(len argv > 1) {
 		# we were given a number as an argument, start dialing
@@ -209,6 +222,7 @@ set_volume(volume : real)
 	sys->fprint(fd, "volume %f", volume);
 }
 
+# Hang up a specific line index starting from 0.
 hangup(index : int)
 {
 	fd := sys->open("/phone/phone", sys->OWRITE);
@@ -220,6 +234,7 @@ hangup(index : int)
 	phone_state = IDLE;
 }
 
+# Hang up the current call and resume the background call if present.
 hangup_current()
 {
 	fd := sys->open("/phone/phone", sys->OWRITE);
@@ -242,6 +257,7 @@ dial(number : string)
 	phone_state = ACTIVE;
 }
 
+# Read /dev/buttons to look for volume up/volume down events.
 monitor_buttons()
 {
 	volume := 10;
@@ -251,17 +267,16 @@ monitor_buttons()
 		return;
 	}
 	for(;;) {
-		newstr : string;
 		buf := array[64] of byte;
 		n := sys->read(fd, buf, len buf);
 		buf = buf[:n];
-		str := string buf;
-		if(rstrip(str) == "volume up press") {
+		s := string buf;
+		if(rstrip(s) == "volume up press") {
 			if(volume < 10) {
 				volume += 1;
 				set_volume(real volume / 10.0);
 			}
-		} else if(rstrip(str) == "volume down press") {
+		} else if(rstrip(s) == "volume down press") {
 			if(volume > 0) {
 				volume -= 1;
 				set_volume(real volume / 10.0);
@@ -270,6 +285,7 @@ monitor_buttons()
 	}
 }
 
+# Open phone device to look for incoming events, e.g. the phone ringing.
 monitor(phonech : chan of string)
 {
 	fd := sys->open("/phone/phone", sys->OREAD);
@@ -278,15 +294,56 @@ monitor(phonech : chan of string)
 		return;
 	}
 	for(;;) {
-		newstr : string;
 		buf := array[64] of byte;
 		n := sys->read(fd, buf, len buf);
 		buf = buf[:n];
-		str := string buf;
-		phonech <-= rstrip(str);
+		s := string buf;
+		phonech <-= rstrip(s);
 	}
 }
 
+# Polls the call list (a list of active, held, and waiting calls).
+monitor_calls(ch : chan of string)
+{
+	buf := array[256] of byte;
+	for(;;) {
+		fd := sys->open("/phone/calls", sys->OREAD);
+		if(fd == nil) {
+			sys->fprint(sys->fildes(2), "could not open calls: %r\n");
+			return;
+		}
+		n := sys->read(fd, buf, len buf);
+		if(n == 0) {
+			phone_state = IDLE;
+			call.state = "inactive";
+			call.number = "";
+		} else {
+			buf := string buf;
+			(re, nil) := regex->compile("state (.*)\n", 1);
+			a := regex->execute(re, buf);
+			(bgn, end) := a[1];
+			state := buf[bgn:end];
+			case state {
+				"0" => call.state = "active";
+				"1" => call.state = "holding";
+				"2" => call.state = "dialing";
+				"3" => call.state = "alerting";
+				"4" => call.state = "incoming";
+				"5" => call.state = "waiting";
+			}
+
+			(re, nil) = regex->compile("number (.*)\n", 1);
+			a = regex->execute(re, buf);
+			(bgn, end) = a[1];
+			number := buf[bgn:end];
+			call.number = number;
+		}
+		sys->print("state %s number %s\n", call.state, call.number);
+		sys->sleep(1000);
+	}
+}
+
+# Get the call list (a list of active, held, and waiting calls).
 # Currently just throws away data. Only used to fix hangup bug.
 get_call_list()
 {
