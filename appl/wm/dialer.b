@@ -396,6 +396,7 @@ strstr(s, t : string) : int
 	return -1;
 }
 
+# Removes whitespace from the end of a string
 rstrip(s : string) : string
 {
 	for(i := len s - 1; i >= 0; i--) {
