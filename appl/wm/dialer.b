@@ -41,7 +41,7 @@ audio_route := EARPIECE;
 task_cfg := array[] of {
 	"frame .fl -width 40w -height 40w",
 	"frame .b",
-	"label .l -text {Enter number to dial}",
+	"label .number -text {Enter number to dial}",
 	"button .b.back -text {<-} -command {send cmd back}",
 	"frame .row1 -height 100",
 	"button .b.1 -height 50 -text 1 -command {send cmd 1}",
@@ -66,10 +66,12 @@ task_cfg := array[] of {
 	"button .b.dial -height 50 -text Dial -command {send cmd dial}",
 	"button .b.hangup -height 50 -text {Hang up} -command {send cmd hangup}",
 	"button .b.switchroute -height 50 -text {Speaker} -command {send cmd switch_route}",
-	"pack .l .b.back",
+	"label .status -text {Status}",
+	"pack .number .b.back",
 	"pack .row1 .row2 .row3 .row4 -fill both -in .b",
 	"pack .b.dial .b.hangup .b.switchroute -fill both -in .b",
 	"pack .b -fill both",
+	"pack .status -fill x",
 	"pack .fl -fill both -expand 1",
 	"pack propagate . 0",
 	"update",
@@ -104,10 +106,10 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	tkclient->startinput(t, "kbd"::"ptr"::nil);
 
 	phonech := chan of string;
-	calllistch := chan of string;
-	spawn monitor(phonech);
+	callsch := chan of string;
+	spawn monitor_phone(phonech);
 	spawn monitor_buttons();
-	spawn monitor_calls(calllistch);
+	spawn monitor_calls(callsch);
 
 	if(len argv > 1) {
 		# we were given a number as an argument, start dialing
@@ -172,6 +174,9 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		dial(labeltext);
 		route(audio_route);
 		get_call_list();
+		"answer" =>
+		answer();
+		route(audio_route);
 		"hangup" =>
 		hangup_current();
 		"switch_route" =>
@@ -185,7 +190,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 			tk->cmd(t, ".b.switchroute configure -text Speaker");
 		}
 		}
-		tk->cmd(t, ".l configure -text {" + labeltext + "}");
+		tk->cmd(t, ".number configure -text {" + labeltext + "}");
 		tk->cmd(t, "update");
 	phonemsg := <- phonech =>
 		case phonemsg {
@@ -193,7 +198,15 @@ init(ctxt: ref Draw->Context, argv: list of string)
 			phone_state = RINGING;
 			sys->print("ring!");
 		}
-		tk->cmd(t, ".l configure -text {" + phonemsg +"}");
+		tk->cmd(t, ".number configure -text {" + phonemsg +"}");
+		tk->cmd(t, "update");
+	nil = <- callsch =>
+		tk->cmd(t, ".status configure -text {" + call.state + " (" + call.number + ")}");
+		if(call.state == "incoming") {
+			tk->cmd(t, ".b.dial configure -text Answer -command {send cmd answer}");
+		} else {
+			tk->cmd(t, ".b.dial configure -text Dial -command {send cmd dial}");
+		}
 		tk->cmd(t, "update");
 	}
 }
@@ -257,6 +270,17 @@ dial(number : string)
 	phone_state = ACTIVE;
 }
 
+answer()
+{
+	fd := sys->open("/phone/phone", sys->OWRITE);
+	if(fd == nil) {
+		sys->fprint(sys->fildes(2), "could not open phone: %r\n");
+		return;
+	}
+	sys->fprint(fd, "answer");
+	phone_state = ACTIVE;
+}
+
 # Read /dev/buttons to look for volume up/volume down events.
 monitor_buttons()
 {
@@ -286,7 +310,7 @@ monitor_buttons()
 }
 
 # Open phone device to look for incoming events, e.g. the phone ringing.
-monitor(phonech : chan of string)
+monitor_phone(phonech : chan of string)
 {
 	fd := sys->open("/phone/phone", sys->OREAD);
 	if(fd == nil) {
@@ -314,6 +338,7 @@ monitor_calls(ch : chan of string)
 		}
 		n := sys->read(fd, buf, len buf);
 		if(n == 0) {
+			# we read 0 bytes, meaning no calls
 			phone_state = IDLE;
 			call.state = "inactive";
 			call.number = "";
@@ -339,6 +364,7 @@ monitor_calls(ch : chan of string)
 			call.number = number;
 		}
 		sys->print("state %s number %s\n", call.state, call.number);
+		ch <-= "update";
 		sys->sleep(1000);
 	}
 }
