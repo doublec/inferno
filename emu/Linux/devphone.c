@@ -37,22 +37,6 @@
 #define POWER_ON 2000
 #define POWER_OFF 2001
 
-typedef enum _SoundType {
-    SOUND_TYPE_VOICE,
-    SOUND_TYPE_SPEAKER,
-    SOUND_TYPE_HEADSET,
-    SOUND_TYPE_BTVOICE
-} SoundType;
-
-typedef enum _AudioPath {
-    SOUND_AUDIO_PATH_HANDSET,
-    SOUND_AUDIO_PATH_HEADSET,
-    SOUND_AUDIO_PATH_SPEAKER,
-    SOUND_AUDIO_PATH_BLUETOOTH,
-    SOUND_AUDIO_PATH_BLUETOOTH_NO_NR,
-    SOUND_AUDIO_PATH_HEADPHONE
-} AudioPath;
-
 // Inferno-related globals
 
 enum
