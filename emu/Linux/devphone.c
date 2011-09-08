@@ -468,6 +468,9 @@ handle_error(int seq, int error)
 	}
 }
 
+/* handle_sol_response is called when we recieve a solicited response from RIL,
+   i.e. the response to a request we sent. The response can contain data we
+   asked for, indicate an error, or simply indicate success. */
 static void
 handle_sol_response(struct parcel *p)
 {
@@ -565,6 +568,9 @@ handle_sol_response(struct parcel *p)
 	}
 }
 
+/* handle_unsol_response is called when we receive an unsolicited response from
+   RIL. Unsolicited responses inform us of events like an incoming call or
+   SMS. */
 static void
 handle_unsol_response(struct parcel *p)
 {
