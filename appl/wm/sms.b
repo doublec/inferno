@@ -181,6 +181,18 @@ readthread(ctxt: ref Draw->Context, u: string)
 			if (s == "goback") {
 				kill(updaterpid);
 				return;
+			} else if (s == "sendsms") {
+				txt := tk->cmd(t, ".compose.t get 1.0 end");
+				sys->print("to send: %s\n", txt);
+
+				# open the SMS file
+				sendfile := bio->open("/phone/sms", bio->OWRITE);
+				if (sendfile != nil) {
+					bio->sendfile.puts("send " + u + " " + txt);
+					bio->sendfile.close();
+				} else {
+					sys->fprint(sys->fildes(2), "can't open /phone/sms\n");
+				}
 			}
 		}
 	}
