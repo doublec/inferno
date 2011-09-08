@@ -221,14 +221,14 @@ route(path : int)
 	}
 }
 
-set_volume(volume : real)
+set_volume(volume : int)
 {
 	fd := sys->open("/phone/ctl", sys->OWRITE);
 	if(fd == nil) {
 		sys->fprint(sys->fildes(2), "could not open phone control device: %r\n");
 		return;
 	}
-	sys->fprint(fd, "volume %f", volume);
+	sys->fprint(fd, "volume %d", volume);
 }
 
 # Hang up a specific line index starting from 0.
@@ -276,7 +276,7 @@ answer()
 # Read /dev/buttons to look for volume up/volume down events.
 monitor_buttons()
 {
-	volume := 10;
+	volume := 5;
 	fd := sys->open("/dev/buttons", sys->OREAD);
 	if(fd == nil) {
 		sys->fprint(sys->fildes(2), "could not open buttons: %r\n");
@@ -288,14 +288,18 @@ monitor_buttons()
 		buf = buf[:n];
 		s := string buf;
 		if(rstrip(s) == "volume up press") {
-			if(volume < 10) {
+			if(volume < 5) {
 				volume += 1;
-				set_volume(real volume / 10.0);
+				set_volume(volume);
+			} else {
+				set_volume(5);
 			}
 		} else if(rstrip(s) == "volume down press") {
 			if(volume > 0) {
 				volume -= 1;
-				set_volume(real volume / 10.0);
+				set_volume(volume);
+			} else {
+				set_volume(0);
 			}
 		}
 	}

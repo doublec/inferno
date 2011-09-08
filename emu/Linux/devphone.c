@@ -358,7 +358,15 @@ phonewrite(Chan *c, void *va, long n, vlong offset)
 			}
 		} else if(strcmp(args[0], "volume") == 0) {
 			if(nargs >= 2) {
-				af_setVoiceVolume(strtod(args[1], NULL));
+				switch(strtol(args[1], NULL, 10)) {
+				case 0: af_setVoiceVolume(0.0); break;
+				case 1: af_setVoiceVolume(0.2); break;
+				case 2: af_setVoiceVolume(0.4); break;
+				case 3: af_setVoiceVolume(0.6); break;
+				case 4: af_setVoiceVolume(0.8); break;
+				case 5: af_setVoiceVolume(1.0); break;
+				default: af_setVoiceVolume(1.0); break;
+				}
 			}
 		}
 		free(str);
