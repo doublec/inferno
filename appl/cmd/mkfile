@@ -135,6 +135,7 @@ TARG=\
 	sendmail.dis\
 	sha1sum.dis\
 	sleep.dis\
+	smsd.dis\
 	sort.dis\
 	src.dis\
 	stack.dis\
