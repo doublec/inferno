@@ -89,6 +89,10 @@ init(ctxt: ref Draw->Context, nil: list of string)
 	tkclient->onscreen(t, nil);
 	tkclient->startinput(t, "ptr"::nil);
 
+	pid := chan of int;
+	spawn convupdater(t, pid);
+	convupdatepid := <-pid;
+
 	u : string;	
 	# Event loop
 	for(;;) {
@@ -113,6 +117,8 @@ init(ctxt: ref Draw->Context, nil: list of string)
 		s := <-t.ctxt.ctl or
 		s = <-t.wreq or
 		s = <-wmchan =>
+			if (s == "exit")
+				kill(convupdatepid);
 			tkclient->wmctl(t, s);
 		}
 
@@ -164,7 +170,7 @@ readthread(ctxt: ref Draw->Context, u: string)
 
 	tkclient->startinput(t, "kbd"::"ptr"::nil);
 	pid := chan of int;
-	spawn updater(t, data, pid);
+	spawn threadupdater(t, data, pid);
 	updaterpid := <-pid;
 	for (;;) {
 		alt {
@@ -198,7 +204,29 @@ readthread(ctxt: ref Draw->Context, u: string)
 	}
 }
 
-updater(t: ref Tk->Toplevel, data: ref Bufio->Iobuf, pid: chan of int)
+convupdater(t: ref Tk->Toplevel, pid: chan of int)
+{
+	pid <- = sys->pctl(0, nil);
+
+	lastmtime := 0;
+
+	for (;;) {
+		dirname := "/usr/" + rf("/dev/user") + "/lib/sms";
+		(nil, dirstat) := sys->stat(dirname);
+		if (dirstat.mtime > lastmtime) {
+			convs := loadconvos();
+			tk->cmd(t, ".f.lb delete 0 end");
+			for (; convs != nil; convs = tl convs)
+				tk->cmd(t, ".f.lb insert end '"+ hd convs);
+			tk->cmd(t, "update");
+			lastmtime = dirstat.mtime;
+		}
+		sys->sleep(1000);
+	}
+}
+
+
+threadupdater(t: ref Tk->Toplevel, data: ref Bufio->Iobuf, pid: chan of int)
 {
 	pid <- = sys->pctl(0, nil);
 	for (;;) {
