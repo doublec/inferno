@@ -263,6 +263,7 @@ main(int argc, char *argv[])
 	property_get("ro.product.device", device, "");
 	print("read ro.product.device = %s\n", device);
 	if (!strncmp(device, "encore", 6)) {
+		type = 'c';
 		system("cp /data/inferno/etc/buttonserver-nook-color.cfg /data/inferno/etc/buttonserver.cfg");
 		eventfiles = malloc(5*sizeof(char *));
 		eventfiles[0] = "/dev/input/event0";
@@ -280,6 +281,7 @@ main(int argc, char *argv[])
 		system("echo \"on\" > /sys/power/state");
 		system("echo 255 > /sys/devices/platform/omap_pwm_led/leds/lcd-backlight/brightness");
 	} else if (!strncmp(device, "crespo", 6)) {
+		type = 's';
 		system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
 		eventfiles = malloc(7*sizeof(char *));
 		eventfiles[0] = "/dev/input/event0";
@@ -298,6 +300,7 @@ main(int argc, char *argv[])
 		system("echo \"on\" > /sys/power/state");
 		system("echo 255 > /sys/class/backlight/s5p_bl/brightness");
 	} else {	
+		type = 'e';
 		/* This is the emulator, I actually don't know what its device reports. */
 		eventfiles = malloc(2*sizeof(char *));
 		eventfiles[0] = "/dev/input/event0";

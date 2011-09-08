@@ -1,5 +1,8 @@
 implement Sms;
 
+# This module is amateur hour.
+# Author: John Floren
+
 include "sys.m";
 	sys: Sys;
 
@@ -116,6 +119,8 @@ init(ctxt: ref Draw->Context, nil: list of string)
 	}
 }
 
+# We spawn a new window so we could, theoretically, minimize this
+# and go open a new thread to read at the same time.
 readthread(ctxt: ref Draw->Context, u: string)
 {
 	(t, wmchan) := tkclient->toplevel(ctxt, nil, "Send message", 0);
@@ -158,6 +163,9 @@ readthread(ctxt: ref Draw->Context, u: string)
 	tk->cmd(t, "update");
 
 	tkclient->startinput(t, "kbd"::"ptr"::nil);
+	pid := chan of int;
+	spawn updater(t, data, pid);
+	updaterpid := <-pid;
 	for (;;) {
 		alt {
 		s := <-t.ctxt.kbd =>
@@ -170,8 +178,30 @@ readthread(ctxt: ref Draw->Context, u: string)
 				tkclient->wmctl(t, s);
 		s := <-composecmd =>
 			sys->print("read %s\n", s);
-			if (s == "goback")
+			if (s == "goback") {
+				kill(updaterpid);
 				return;
+			}
+		}
+	}
+}
+
+updater(t: ref Tk->Toplevel, data: ref Bufio->Iobuf, pid: chan of int)
+{
+	pid <- = sys->pctl(0, nil);
+	for (;;) {
+		s := bio->data.gets('\n');
+		if (len s > 0) {
+			if (s[:3] == "Me:")
+				tk->cmd(t, ".messages insert end " + tk->quote(s) + " { me }");
+			else
+				tk->cmd(t, ".messages insert end " + tk->quote(s) + " { them }");
+
+			tk->cmd(t, ".messages insert end '\n");
+			tk->cmd(t, ".messages scan mark 0 0");
+			tk->cmd(t, ".messages scan dragto -100000 -100000");
+			tk->cmd(t, "update");
+			sys->sleep(1000);
 		}
 	}
 }
@@ -205,4 +235,11 @@ rf(file: string): string
 		return "";
 
 	return string buf[0:n];	
+}
+
+kill(pid: int)
+{
+	fd := sys->open("#p/"+string pid+"/ctl", Sys->OWRITE);
+	if(fd != nil)
+		sys->fprint(fd, "kill");
 }
