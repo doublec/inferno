@@ -2,7 +2,8 @@
 #include <linux/input.h>
 #include <stdio.h>
 
-void event_process(struct input_event *ev, int count, int event_num) {
+void
+event_process(struct input_event *ev, int count, int event_num) {
 	int i;
 	for(i = 0; i < count; i++) {
 		char buf[80];
@@ -14,7 +15,8 @@ void event_process(struct input_event *ev, int count, int event_num) {
 	}
 }
 
-void eventslave(void *event_num) {
+void
+eventslave(void *event_num) {
 	int eventfd = eventfds[*((int *)event_num)];
 	int rd, value, size = sizeof(struct input_event);
 	struct input_event ev[64];

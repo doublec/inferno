@@ -7,7 +7,8 @@
 /* SMS-related functions */
 
 // writes UTF-8 translation to out and returns number of bytes written
-int gsm_to_utf8(char gsm, char *out)
+int
+gsm_to_utf8(char gsm, char *out)
 {
 	switch(gsm) {
 	case '\0': *out = '@'; return 1;
@@ -59,7 +60,8 @@ int gsm_to_utf8(char gsm, char *out)
 }
 
 // Unicode to GSM SMS format, returns number of bytes written to out
-int rune_to_gsm(Rune r, char *out)
+int
+rune_to_gsm(Rune r, char *out)
 {
 	switch(r) {
 	case L'@': *out = 0; return 1;
@@ -118,13 +120,13 @@ int rune_to_gsm(Rune r, char *out)
 	}
 }
 
-char *hexify(char *bytes, size_t len)
+static char*
+hexify(char *bytes, size_t len)
 {
-	char *hexarray[256];
+	char hexarray[256][3];
 	int i, j;
 	char *ret;
 	for(i = 0; i < 256; i++) {
-		hexarray[i] = (char *) malloc(3 * sizeof(char));
 		snprintf(hexarray[i], 3, "%02x", i);
 	}
 	ret = (char *) malloc((len * 2 + 1) * sizeof(char));
@@ -133,13 +135,11 @@ char *hexify(char *bytes, size_t len)
 		ret[j + 1] = hexarray[(unsigned char) bytes[i]][1];
 	}
 	ret[j] = '\0';
-	for(i = 0; i < 256; i++) {
-		free(hexarray[i]);
-	}
 	return ret;
 }
 
-int decode_sms(char *hexstr, struct recvd_sms *sms)
+int
+decode_sms(char *hexstr, struct recvd_sms *sms)
 {
 	int smsc_len, src_len, curpos, msg_len;
 	char **bytes;
@@ -154,7 +154,7 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 		fprintf(stderr, "malformed hex string passed to decode_sms\n");
 		return -1;
 	}
-    
+
 	/* first, split the string up into an array of hex representations of
 	   the bytes--this makes things much easier overall */
 	bytes = malloc((len / 2) * sizeof(char *));
@@ -261,7 +261,8 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 	return 0;
 }
 
-char *encode_sms(char *destnum, Rune *runemsg)
+char*
+encode_sms(char *destnum, Rune *runemsg)
 {
 	int i, j, padded_dest_len, packed_msg_len, ret_len, msg_len;
 	char *dest, *packed_msg, *final_msg, *ret, *msg;
@@ -312,8 +313,7 @@ char *encode_sms(char *destnum, Rune *runemsg)
 	// FIXME: too much of the sent msg is hardcoded
 	ret_len = 14 + strlen(dest) + strlen(final_msg);
 	ret = malloc((ret_len + 1) * sizeof(char));
-	snprintf(ret, ret_len + 1, "0120%s91%s0000%02x%s", strlen(destnum), dest, msg_len, final_msg);
-
+	snprintf(ret, ret_len + 1, "0120%02x91%s0000%02x%s", strlen(destnum), dest, msg_len, final_msg);
 	free(packed_msg);
 	free(final_msg);
 	free(dest);

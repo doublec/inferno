@@ -13,7 +13,8 @@ struct parcel {
 	size_t size;
 };
 
-int parcel_init(struct parcel *p)
+int
+parcel_init(struct parcel *p)
 {
 	p->data = malloc(sizeof(int32_t)); // arbitrary size to start with
 	if(p->data == NULL) return -1;
@@ -23,7 +24,8 @@ int parcel_init(struct parcel *p)
 	return 0;
 }
 
-int parcel_grow(struct parcel *p, size_t size)
+int
+parcel_grow(struct parcel *p, size_t size)
 {
 	char *new = realloc(p->data, p->capacity + size);
 
@@ -35,7 +37,8 @@ int parcel_grow(struct parcel *p, size_t size)
 	return 0;
 }
 
-void parcel_free(struct parcel *p)
+void
+parcel_free(struct parcel *p)
 {
 	free(p->data);
 	p->size = 0;
@@ -43,7 +46,8 @@ void parcel_free(struct parcel *p)
 	p->offset = 0;
 }
 
-int32_t parcel_r_int32(struct parcel *p)
+int32_t
+parcel_r_int32(struct parcel *p)
 {
 	int32_t ret;
 	ret = *((int32_t *) (p->data + p->offset));
@@ -51,7 +55,8 @@ int32_t parcel_r_int32(struct parcel *p)
 	return ret;
 }
 
-int parcel_w_int32(struct parcel *p, int32_t val)
+int
+parcel_w_int32(struct parcel *p, int32_t val)
 {
 	for(;;) {
 /*		printf("parcel_w_int32(%d): offset = %d, cap = %d, size = %d\n",
@@ -72,7 +77,8 @@ int parcel_w_int32(struct parcel *p, int32_t val)
 	return 0;
 }
 
-int parcel_w_string(struct parcel *p, char *str)
+int
+parcel_w_string(struct parcel *p, char *str)
 {
 	char16_t *s16;
 	size_t s16_len;
@@ -111,8 +117,6 @@ int parcel_w_string(struct parcel *p, char *str)
 					0x00000000, 0x00ffffff, 0x0000ffff, 0x000000ff
 				};
 #endif
-				//printf("Applying pad mask: %p to %p\n", (void*)mask[padded-len],
-				//    *reinterpret_cast<void**>(data+padded-4));
 				*((uint32_t*)(p->data+p->offset+padded-4)) &= mask[padded-len];
 			}
 			break;
@@ -128,7 +132,8 @@ int parcel_w_string(struct parcel *p, char *str)
 	return 0;
 }
 
-char *parcel_r_string(struct parcel *p)
+char*
+parcel_r_string(struct parcel *p)
 {
 	char *ret;
 	int len16 = parcel_r_int32(p);
@@ -142,7 +147,8 @@ char *parcel_r_string(struct parcel *p)
 	return ret;
 }
 
-size_t parcel_data_avail(struct parcel *p)
+size_t
+parcel_data_avail(struct parcel *p)
 {
 	return (p->size - p->offset);
 }

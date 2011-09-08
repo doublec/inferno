@@ -125,7 +125,8 @@ void eventslave(void *a) {
 }
 #endif
 
-void add_event_queue(Queue *q)
+void
+add_event_queue(Queue *q)
 {
 	struct event_queue *node = malloc(sizeof(struct event_queue));
 
@@ -145,7 +146,8 @@ void add_event_queue(Queue *q)
 	}
 }
 
-void del_event_queue(Queue *q)
+void
+del_event_queue(Queue *q)
 {
 	struct event_queue *cur, *prev;
 
@@ -165,7 +167,8 @@ void del_event_queue(Queue *q)
 }
 
 // Send a message to all queues in the event queue list
-void event_queue_produce(char *str)
+void
+event_queue_produce(char *str)
 {
 	struct event_queue *cur;
 	for(cur = event_queue_head; cur != NULL; cur = cur->next) {
