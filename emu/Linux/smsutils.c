@@ -242,9 +242,9 @@ decode_sms(char *hexstr, struct recvd_sms *sms)
 		msgbytes[i] = msgbytes[i] << numoldbits;
 		// GSM alphabet is different than UTF-8 alphabet
 		j += gsm_to_utf8(msgbytes[i] | oldbits, msg + j);
+		printf("%02x\n", msg[j - 1]);
 		if(numbits == 7) {
-			msg[j] = newbits;
-			j++;
+			j += gsm_to_utf8(newbits, msg + j);
 			newbits = 0;
 			numbits = 0;
 		}
