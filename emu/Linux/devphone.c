@@ -59,9 +59,6 @@ Dirtab phonetab[] =
 	"calls",  {Qcalls},	    0, 0666,
 };
 
-Queue *phoneq;
-Queue *smsq;
-
 static int signal_strength;
 static int fd;
 static int power_state = 0;
@@ -82,6 +79,9 @@ static struct {
 	RIL_Call *cs;
 	int num;
 } calls;
+
+static struct listener_node *phone_listeners = NULL;
+static struct listener_node *sms_listeners = NULL;
 
 static void loop_for_data(void *v);
 static void send_sms(char *smsc_pdu, char *pdu);
@@ -156,12 +156,6 @@ phoneinit(void)
 	status_msg.ready = 0;
 	status_msg.used = 0;
 	memset(&status_msg.l, 0, sizeof(QLock));
-	phoneq = qopen(512, 0, nil, nil);
-	if(phoneq == 0)
-		panic("no memory");
-	smsq = qopen(512, 0, nil, nil);
-	if(smsq == 0)
-		panic("no memory");
 
 	// set up proper permissions (need to be user radio, group radio to
 	// access socket)
@@ -227,6 +221,14 @@ phoneopen(Chan *c, int omode)
 		calls.ready = 0;
 		get_current_calls();
 		break;
+	case Qphone:
+		c->aux = qopen(512, 0, nil, nil);
+		add_listener(&phone_listeners, c->aux);
+		break;
+	case Qsms:
+		c->aux = qopen(512, 0, nil, nil);
+		add_listener(&sms_listeners, c->aux);
+		break;
 	}
 
 	return c;
@@ -237,6 +239,19 @@ phoneclose(Chan *c)
 {
 	if((c->flag & COPEN) == 0)
 		return;
+
+	switch((ulong) c->qid.path) {
+	case Qphone:
+		del_listener(&phone_listeners, c->aux);
+		qfree(c->aux);
+		c->aux = NULL;
+		break;
+	case Qsms:
+		del_listener(&sms_listeners, c->aux);
+		qfree(c->aux);
+		c->aux = NULL;
+		break;
+	}
 }
 
 static long
@@ -252,11 +267,11 @@ phoneread(Chan *c, void *va, long n, vlong offset)
 	case Qctl:
 		return readstr(offset, va, n, power_state ? "on\n" : "off\n");
 	case Qphone:
-		return qread(phoneq, va, n);
+		return qread(c->aux, va, n);
 	case Qsms:
 		// FIXME only acknowledge when an SMS is being read
 		acknowledge_sms();
-		return qread(smsq, va, n);
+		return qread(c->aux, va, n);
 	case Qsignal:
 		snprintf(buf, sizeof(buf), "%d\n", signal_strength);
 		return readstr(offset, va, n, buf);
@@ -440,10 +455,10 @@ handle_error(int seq, int error)
 	char *errmsg = errmsgs[error];
 	switch(seq) {
 	case RIL_REQUEST_SEND_SMS:
-		qproduce(smsq, errmsg, strlen(errmsg));
+		listeners_produce(&sms_listeners, errmsg, strlen(errmsg));
 		break;
 	case RIL_REQUEST_DIAL:
-		qproduce(phoneq, errmsg, strlen(errmsg));
+		listeners_produce(&phone_listeners, errmsg, strlen(errmsg));
 		break;
 	case RIL_REQUEST_REGISTRATION_STATE:
 		status_msg.ready = -1;
@@ -578,7 +593,7 @@ handle_unsol_response(struct parcel *p)
 		l = snprintf(buf, sizeof(buf), "%s (%s): %s\n", sms.src_num,
 			     sms.timestamp, sms.msg);
 		buf[l] = '\0';
-		qproduce(smsq, buf, strlen(buf));
+		listeners_produce(&sms_listeners, buf, strlen(buf));
 
 		free(sms.msg);
 		free(sms.service_center);
@@ -586,7 +601,7 @@ handle_unsol_response(struct parcel *p)
 		free(sms.timestamp);
 		break;
 	case RIL_UNSOL_CALL_RING:
-		qproduce(phoneq, "ring\n", 5);
+		listeners_produce(&phone_listeners, "ring\n", 5);
 		break;
 	case RIL_UNSOL_SIGNAL_STRENGTH:
 		signal_strength = parcel_r_int32(p);
@@ -595,7 +610,7 @@ handle_unsol_response(struct parcel *p)
 		break;
 	case RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED:
 		print("call state changed\n");
-		qproduce(phoneq, "call state changed\n", 20);
+		listeners_produce(&phone_listeners, "call state changed\n", 20);
 		break;
 	}
 }

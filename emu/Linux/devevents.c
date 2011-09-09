@@ -2,6 +2,8 @@
 #include <linux/input.h>
 #include <stdio.h>
 
+extern struct listener_node *event_listeners;
+
 void
 event_process(struct input_event *ev, int count, int event_num) {
 	int i;
@@ -11,7 +13,7 @@ event_process(struct input_event *ev, int count, int event_num) {
 		len = snprintf(buf, sizeof(buf), "%d %d %hu %d\n", event_num,  
 			 ev[i].type, ev[i].code, ev[i].value);
 		buf[len] = '\0';
-		event_queue_produce(buf);
+		listeners_produce(&event_listeners, buf, strlen(buf));
 	}
 }
 
