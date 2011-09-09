@@ -113,7 +113,14 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		dial(number);
 	}
 
+	# Figure out the current phone state when we start
 	update_call_list();
+	tk->cmd(t, ".status configure -text { Status: " + call.state + " (" + call.number + ")}");
+	if(call.state == "incoming") {
+		tk->cmd(t, ".b.dial configure -text Answer -command {send cmd answer}");
+	} else {
+		tk->cmd(t, ".b.dial configure -text Dial -command {send cmd dial}");
+	}
 
 	for(;;)	alt {
 	s := <-t.ctxt.kbd =>
@@ -189,24 +196,27 @@ init(ctxt: ref Draw->Context, argv: list of string)
 		tk->cmd(t, ".number configure -text {" + labeltext + "}");
 		tk->cmd(t, "update");
 	phonemsg := <- phonech =>
-		sys->print("phonemsg: %s\n", phonemsg);
+		# We've read from the phone device
 		case phonemsg {
 		"ring" =>
 			sys->print("ring!\n");
 		"call state changed" =>
 			update_call_list();
-			tk->cmd(t, ".status configure -text {" + call.state + " (" + call.number + ")}");
+			tk->cmd(t, ".status configure -text { Status: " + call.state + " (" + call.number + ")}");
 			if(call.state == "incoming") {
 				tk->cmd(t, ".b.dial configure -text Answer -command {send cmd answer}");
 			} else {
 				tk->cmd(t, ".b.dial configure -text Dial -command {send cmd dial}");
 			}			
 		}
+		# Display the received message from the phone device in
+		# the top label (this might go away)
 		tk->cmd(t, ".number configure -text {" + phonemsg +"}");
 		tk->cmd(t, "update");
 	}
 }
 
+# change the audio call route to (currently) either the earpiece or the speaker
 route(path : int)
 {
 	fd := sys->open("/phone/ctl", sys->OWRITE);
