@@ -316,49 +316,51 @@ static long
 phonewrite(Chan *c, void *va, long n, vlong offset)
 {
 	char *pdu;
-	char *args[5];
-	char *str;
 	Rune *runestr;
-	int nargs = 0, i, j;
+	int i, j;
+	Cmdbuf *cmd;
 
 	if(c->qid.type & QTDIR)
 		error(Eperm);
+
+	cmd = parsecmd(va, n);
+	if(waserror()) {
+		free(cmd);
+		nexterror();
+		return 0;
+	}
+
 	switch((ulong) c->qid.path) {
 	case Qctl:
-		str = malloc((n + 1) * sizeof(char));
-		strncpy(str, va, n);
-		str[n] = '\0';
-		printf("Qctl: va = %s\n", str);
-		nargs = getfields(str, args, sizeof(args), 1, " \n");
-		if(strcmp(args[0], "on") == 0) {
+		if(strcmp(cmd->f[0], "on") == 0) {
 			radio_power(1);
-		} else if(strcmp(args[0], "off") == 0) {
+		} else if(strcmp(cmd->f[0], "off") == 0) {
 			radio_power(0);
-		} else if(strcmp(args[0], "net") == 0) {
-			if(nargs >= 2) {
-				if(strcmp(args[1], "on") == 0) {
+		} else if(strcmp(cmd->f[0], "net") == 0) {
+			if(cmd->nf >= 2) {
+				if(strcmp(cmd->f[1], "on") == 0) {
 					activate_net();
-				} else if(strcmp(args[1], "off") == 0) {
+				} else if(strcmp(cmd->f[1], "off") == 0) {
 					deactivate_net();
 				}
 			}
-		} else if(strcmp(args[0], "mute") == 0) {
+		} else if(strcmp(cmd->f[0], "mute") == 0) {
 			set_mute(1);
-		} else if(strcmp(args[0], "unmute") == 0) {
+		} else if(strcmp(cmd->f[0], "unmute") == 0) {
 			set_mute(0);
-		} else if(strcmp(args[0], "route") == 0) {
-			if(nargs >= 2) {
-				if(strcmp(args[1], "earpiece") == 0) {
+		} else if(strcmp(cmd->f[0], "route") == 0) {
+			if(cmd->nf >= 2) {
+				if(strcmp(cmd->f[1], "earpiece") == 0) {
 					af_setParameters("routing=1");
-				} else if(strcmp(args[1], "speaker") == 0) {
+				} else if(strcmp(cmd->f[1], "speaker") == 0) {
 					af_setParameters("routing=2");
-				} else if(strcmp(args[1], "headphone") == 0) {
+				} else if(strcmp(cmd->f[1], "headphone") == 0) {
 					af_setParameters("routing=3");
 				}
 			}
-		} else if(strcmp(args[0], "volume") == 0) {
-			if(nargs >= 2) {
-				switch(strtol(args[1], NULL, 10)) {
+		} else if(strcmp(cmd->f[0], "volume") == 0) {
+			if(cmd->nf >= 2) {
+				switch(strtol(cmd->f[1], NULL, 10)) {
 				case 0: af_setVoiceVolume(0.0); break;
 				case 1: af_setVoiceVolume(0.2); break;
 				case 2: af_setVoiceVolume(0.4); break;
@@ -369,55 +371,43 @@ phonewrite(Chan *c, void *va, long n, vlong offset)
 				}
 			}
 		}
-		free(str);
 		break;
 	case Qsms:
-		str = malloc((n + 1) * sizeof(char));
-		strncpy(str, va, n);
-		str[n] = '\0';
-		printf("Qsms: va = %s\n", str);
-		nargs = getfields(str, args, 3, 1, " ");
-		if(strcmp(args[0], "send") == 0) {
-			if(nargs == 3) {
-				runestr = malloc((utflen(args[2]) + 1) * sizeof(Rune));
-				for(i = 0, j = 0; j < strlen(args[2]); i++) {
-					j += chartorune(runestr + i, args[2] + j);
+		if(strcmp(cmd->f[0], "send") == 0) {
+			if(cmd->nf == 3) {
+				runestr = malloc((utflen(cmd->f[2]) + 1) * sizeof(Rune));
+				for(i = 0, j = 0; j < strlen(cmd->f[2]); i++) {
+					j += chartorune(runestr + i, cmd->f[2] + j);
 				}
 				runestr[i] = 0;
-				pdu = encode_sms(args[1], runestr);
+				pdu = encode_sms(cmd->f[1], runestr);
 				send_sms(NULL, pdu);
 				
 				free(runestr);
 				free(pdu);
 			}
 		}
-		free(str);
 		break;
 	case Qphone:
-		str = malloc((n + 1) * sizeof(char));
-		strncpy(str, va, n);
-		str[n] = '\0';
-		printf("Qphone: va = %s\n", str);
-		nargs = getfields(str, args, sizeof(args), 1, " \n");
-		if(strcmp(args[0], "answer") == 0) {
+		if(strcmp(cmd->f[0], "answer") == 0) {
 			answer();
-		} else if(strcmp(args[0], "dial") == 0) {
-			if(nargs != 2) {
+		} else if(strcmp(cmd->f[0], "dial") == 0) {
+			if(cmd->nf != 2) {
 				fprintf(stderr, "malformed dial request\n");
-				free(str);
 				break;
 			}
-			dial(args[1]);
-		} else if(strcmp(args[0], "hangup") == 0) {
-			if(nargs == 2) {
-				hangup(strtol(args[1], NULL, 10));
+			dial(cmd->f[1]);
+		} else if(strcmp(cmd->f[0], "hangup") == 0) {
+			if(cmd->nf == 2) {
+				hangup(strtol(cmd->f[1], NULL, 10));
 			} else {
 				hangup_current();
 			}
 		}
-		free(str);
 		break;
 	}
+	poperror();
+	free(cmd);
 	return n;
 }
 
@@ -446,7 +436,7 @@ static void
 handle_error(int seq, int error)
 {
 	// RIL error messages
-	char *errmsgs[] = { "error: no error", "error: radio not available", "error: generic failure", "error: password incorrect", "error: need SIM PIN2", "error: need SIM PUK2", "error: request not supported", "error: cancelled", "error: cannot access network during voice calls", "error: cannot access network before registering to network", "error: retry sending sms", "error: no SIM", "error: no subscription", "error: mode not supported", "error: FDN list check failed", "error: illegal SIM or ME" };
+	char *errmsgs[] = { "error: no error\n", "error: radio not available\n", "error: generic failure\n", "error: password incorrect\n", "error: need SIM PIN2\n", "error: need SIM PUK2\n", "error: request not supported\n", "error: cancelled\n", "error: cannot access network during voice calls\n", "error: cannot access network before registering to network\n", "error: retry sending sms\n", "error: no SIM\n", "error: no subscription\n", "error: mode not supported\n", "error: FDN list check failed\n", "error: illegal SIM or ME\n" };
 	char *errmsg = errmsgs[error];
 	switch(seq) {
 	case RIL_REQUEST_SEND_SMS:
