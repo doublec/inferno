@@ -115,6 +115,7 @@ init(ctxt: ref Draw->Context, argv: list of string)
 
 	# Figure out the current phone state when we start
 	update_call_list();
+	# Update the status label and dial button to match the phone state
 	tk->cmd(t, ".status configure -text { Status: " + call.state + " (" + call.number + ")}");
 	if(call.state == "incoming") {
 		tk->cmd(t, ".b.dial configure -text Answer -command {send cmd answer}");
@@ -140,41 +141,30 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	bcmd := <-cmd =>
 		case bcmd {
 		"1" =>
-		sys->print("1");
 		labeltext = labeltext + "1";
 		"2" =>
-		sys->print("2");
 		labeltext = labeltext + "2";
 		"3" =>
-		sys->print("3");
 		labeltext = labeltext + "3";
 		"4" =>
-		sys->print("4");
 		labeltext = labeltext + "4";
 		"5" =>
-		sys->print("5");
 		labeltext = labeltext + "5";
 		"6" =>
-		sys->print("6");
 		labeltext = labeltext + "6";
 		"7" =>
-		sys->print("7");
 		labeltext = labeltext + "7";
 		"8" =>
-		sys->print("8");
 		labeltext = labeltext + "8";
 		"9" =>
-		sys->print("9");
 		labeltext = labeltext + "9";
 		"0" =>
-		sys->print("0");
 		labeltext = labeltext + "0";
 		"back" =>
 		if(labeltext != "") {
 			labeltext = labeltext[:len labeltext - 1];
 		}
 		"dial" =>
-		sys->print("dialing %s\n", labeltext);
 		dial(labeltext);
 		route(audio_route);
 		"answer" =>
@@ -198,8 +188,6 @@ init(ctxt: ref Draw->Context, argv: list of string)
 	phonemsg := <- phonech =>
 		# We've read from the phone device
 		case phonemsg {
-		"ring" =>
-			sys->print("ring!\n");
 		"call state changed" =>
 			update_call_list();
 			tk->cmd(t, ".status configure -text { Status: " + call.state + " (" + call.number + ")}");
@@ -367,7 +355,6 @@ update_call_list()
 		number := buf[bgn:end];
 		call.number = number;
 	}
-	sys->print("state %s number %s\n", call.state, call.number);
 }
 
 strstr(s, t : string) : int

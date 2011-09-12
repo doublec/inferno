@@ -75,9 +75,11 @@ static struct {
 	QLock l;
 	Rendez r;
 	int ready;
-	int used;
+	int used; // cat will read until it gets 0 bytes from read()
+	          // need to be able to give cat 0 bytes after it's gotten the
+	          // data
 	RIL_Call *cs;
-	int num;
+	int num; // number of calls in cs
 } calls;
 
 static struct listener_node *phone_listeners = NULL;
@@ -115,13 +117,16 @@ enum audio_mode {
 	NUM_MODES  // not a valid entry, denotes end-of-list
 };
 
+#define DPRINT if(1) print
 
+// Function for Sleep() to check readiness with
 static int
 calls_ready(void *unused)
 {
 	return calls.ready;
 }
 
+// Function for Sleep() to check readiness with
 static int
 status_ready(void *unused)
 {
@@ -483,7 +488,7 @@ handle_sol_response(struct parcel *p)
 	char buf[200];
 	seq = parcel_r_int32(p);
 	error = parcel_r_int32(p);
-	printf("received sol response: seq: %d err: %d\n", seq, error);
+	DPRINT("received sol response: seq: %d err: %d\n", seq, error);
 	if(error != 0) {
 		handle_error(seq, error);
 		return;
@@ -493,7 +498,7 @@ handle_sol_response(struct parcel *p)
 		if(!parcel_data_avail(p)) return;
 		num = parcel_r_int32(p);
 		for(i = 0; i < num; i++) {
-			printf("%s\n", parcel_r_string(p));
+			DPRINT("%s\n", parcel_r_string(p));
 		}
 		break;
 	case POWER_ON:
@@ -517,7 +522,7 @@ handle_sol_response(struct parcel *p)
 		qunlock(&status_msg.l);
 		break;
 	case RIL_REQUEST_DIAL:
-		printf("got RIL_REQUEST_DIAL success\n");
+		DPRINT("got RIL_REQUEST_DIAL success\n");
 		break;
 	case RIL_REQUEST_GET_CURRENT_CALLS:
 		if(!parcel_data_avail(p)) {
@@ -562,8 +567,8 @@ handle_sol_response(struct parcel *p)
 					      malloc(sizeof(RIL_UUS_Info)) :
 					      NULL;
 			if(calls.cs[i].uusInfo != NULL) {
-				// FIXME not implemented yet
-				printf("debug: got uusInfo\n");
+				// not implemented yet
+				DPRINT("debug: got uusInfo\n");
 			}
 		}
 		calls.ready = 1;
@@ -585,8 +590,6 @@ handle_unsol_response(struct parcel *p)
 	struct recvd_sms sms;
 
 	resp_type = parcel_r_int32(p);
-//	printf("unsolicited: type = %d, data left = %d\n", resp_type,
-//	       parcel_data_avail(p));
 	switch(resp_type) {
 	case RIL_UNSOL_RESPONSE_NEW_SMS:
 		decode_sms(parcel_r_string(p), &sms);
@@ -609,7 +612,6 @@ handle_unsol_response(struct parcel *p)
 		// when available (during a call)
 		break;
 	case RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED:
-		print("call state changed\n");
 		listeners_produce(&phone_listeners, "call state changed\n", 20);
 		break;
 	}
@@ -648,14 +650,10 @@ loop_for_data(void *v)
 			free(buf);
 			return;
 		}
-		/*	for(i = 0; i < readlen; i++) {
-			printf("%02x", buf[i]);
-		}
-		printf("\n");*/
 		parcel_grow(&p, msglen);
 		memcpy(p.data, buf, msglen);
 		p.size = msglen;
-		//	printf("Received %d bytes of data from rild.\n", msglen);
+
 		type = parcel_r_int32(&p);
 		if(type == RESPONSE_SOLICITED) {
 			handle_sol_response(&p);
