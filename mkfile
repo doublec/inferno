@@ -146,6 +146,9 @@ kernel/&-Plan9:QV:
 
 # Convenience targets
 
+Android- android-%:V:
+	 mk 'SYSHOST=Android' 'OBJTYPE=arm' $stem
+
 Hp-% hp-%:V:
 	mk 'SYSHOST=Hp' 'OBJTYPE=s800' $stem
 
