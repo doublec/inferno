@@ -25,7 +25,6 @@ OBJ=\
 	segflush-$OBJTYPE.$O\
 	framebuffer.$O\
 	devevents.$O\
-	devphone.$O\
 	parcel.$O\
 	smsutils.$O\
 	listenerqueue.$O\

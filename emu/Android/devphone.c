@@ -75,7 +75,7 @@ static struct {
 	Rendez r;
 	int ready;
 	int used; // cat will read until it gets 0 bytes from read()
-	          // need to be able to give cat 0 bytes after it's gotten the
+	          // need to be able to give cat 0 bytes after it's received the
 	          // data
 	RIL_Call *cs;
 	int num; // number of calls in cs

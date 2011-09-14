@@ -6,7 +6,7 @@
 
 #include "emu-g.root.h"
 
-ulong ndevs = 27;
+ulong ndevs = 28;
 
 extern Dev rootdevtab;
 extern Dev consdevtab;

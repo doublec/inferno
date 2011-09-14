@@ -22,6 +22,7 @@ dev
 	eia
 #	audio	audio-oss
 	mem
+	phone
 
 lib
 	interp
