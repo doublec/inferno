@@ -1,0 +1,42 @@
+===Phone interface===
+Turn on the radio:
+ echo on > /phone/ctl
+Turn off the radio:
+ echo off > /phone/ctl
+Turn on the data connection:
+ echo net on > /phone/ctl
+Turn off the data connection:
+ echo net off > /phone/ctl
+Route the audio to a different device:
+ echo route <earpiece/speaker/headphone> > /phone/ctl
+Change the call volume:
+ echo volume <0-5> > /phone/ctl
+Mute/unmute your microphone:
+ echo <mute/unmute> > /phone/ctl
+
+Dial a number:
+ echo dial <number> > /phone/phone
+Hang up a call:
+ echo hangup > /phone/phone
+Pick up an incoming call:
+ echo answer > /phone/phone
+
+Send an SMS:
+ echo send <number> <quoted message> > /phone/sms
+
+Reading from /phone/phone will give you messages when the phone rings
+and when the call state has changed. You should read from /phone/calls
+when the call state changes.
+
+Reading from /phone/calls gives you a list of calls. The device dumps
+all the information it gets, but the information that you probably
+care about the most is the state of each call and the number of the
+other party. The state is a value 0-5:
+| Value | Meaning  |
+|-------+----------|
+|     0 | Active   |
+|     1 | Holding  |
+|     2 | Dialing  |
+|     3 | Alerting |
+|     4 | Incoming |
+|     5 | Waiting  |

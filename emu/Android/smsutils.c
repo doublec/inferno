@@ -141,7 +141,7 @@ hexify(char *bytes, size_t len)
 int
 decode_sms(char *hexstr, struct recvd_sms *sms)
 {
-	int smsc_len, src_len, curpos, msg_len;
+	int smsc_len, src_len, curpos, packed_len, msg_len;
 	char **bytes;
 	char *service_center, *src_num, *msg;
 	int len, i, j, oldbits, numoldbits, utf8msglen = 0;
@@ -222,8 +222,15 @@ decode_sms(char *hexstr, struct recvd_sms *sms)
 
 	// convert the hex string back into its binary form, since it'll
 	// be much easier to do the bit-manipulation we need to perform
-	msg_len = (len / 2) - (curpos + 1);
-	for(i = curpos + 1, j = 0; i < len / 2, j < msg_len; i++, j++) {
+
+	// the number of characters in the message
+	msg_len = strtol(bytes[curpos], NULL, 16);
+	// the number of bytes the message takes up
+	packed_len = (len / 2) - (curpos + 1);
+
+	// convert the ASCII representation of the raw bytes back into the
+	// raw bytes, since we need to do bit-manipulation for the next step
+	for(i = curpos + 1, j = 0; i < len / 2, j < packed_len; i++, j++) {
 		msgbytes[j] = strtol(bytes[i], NULL, 16);
 	}
 	// FIXME? if we get more than 161 characters somehow this would break
@@ -233,7 +240,7 @@ decode_sms(char *hexstr, struct recvd_sms *sms)
 	// convert message from packed GSM alphabet to UTF-8
 	oldbits = 0;
 	numoldbits = 0;
-	for(i = 0, j = 0; i < msg_len; i++) {
+	for(i = 0, j = 0; i < packed_len; i++) {
 		int numbits = (i % 7) + 1;
 		int newbits;
 		newbits = msgbytes[i] >> (8 - numbits);
@@ -242,7 +249,7 @@ decode_sms(char *hexstr, struct recvd_sms *sms)
 		msgbytes[i] = msgbytes[i] << numoldbits;
 		// GSM alphabet is different than UTF-8 alphabet
 		j += gsm_to_utf8(msgbytes[i] | oldbits, msg + j);
-		if(numbits == 7) {
+		if(numbits == 7 && !(i == packed_len - 1 && msg_len % 8 != 0)) {
 			j += gsm_to_utf8(newbits, msg + j);
 			newbits = 0;
 			numbits = 0;

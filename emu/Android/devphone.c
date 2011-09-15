@@ -97,6 +97,7 @@ static void set_mute(int);
 static void get_current_calls(void);
 static void hangup(int);
 static void hangup_current(void);
+static void get_call_fail_cause(void);
 
 // AudioFlinger layer stuff
 static void *af_handle;
@@ -135,7 +136,6 @@ status_ready(void *unused)
 void
 phoneinit(void)
 {
-	printf("hello\n");
 	af_handle = dlopen("libinfernoaudio.so", RTLD_NOW);
 	if(af_handle == NULL) {
 		fprintf(stderr, "opening libinfernoaudio.so failed: %s\n",
@@ -452,18 +452,60 @@ Dev phonedevtab = {
 
 /* RIL functions */
 
+// Get a string describing a call fail error from the call fail code
+static char*
+call_fail_str(int err)
+{
+	switch(err) {
+	case CALL_FAIL_UNOBTAINABLE_NUMBER: return "unobtainable number";
+	case CALL_FAIL_NORMAL: return "normal failure"; // no idea
+	case CALL_FAIL_BUSY: return "busy";
+	case CALL_FAIL_CONGESTION: return "congestion";
+	case CALL_FAIL_ACM_LIMIT_EXCEEDED: return "ACM limit exceeded";
+	case CALL_FAIL_CALL_BARRED: return "call barred";
+	case CALL_FAIL_FDN_BLOCKED: return "FDN blocked";
+	case CALL_FAIL_IMSI_UNKNOWN_IN_VLR: return "IMSI unknown in VLR";
+	case CALL_FAIL_IMEI_NOT_ACCEPTED: return "IMEI not accepted";
+	case CALL_FAIL_CDMA_LOCKED_UNTIL_POWER_CYCLE:
+		return "locked until power cycle";
+	case CALL_FAIL_CDMA_DROP: return "drop";
+	case CALL_FAIL_CDMA_INTERCEPT: return "intercept";
+	case CALL_FAIL_CDMA_REORDER: return "reorder";
+	case CALL_FAIL_CDMA_SO_REJECT: return "SO reject";
+	case CALL_FAIL_CDMA_RETRY_ORDER: return "retry order";
+	case CALL_FAIL_CDMA_ACCESS_FAILURE: return "access failure";
+	case CALL_FAIL_CDMA_PREEMPTED: return "preempted";
+	case CALL_FAIL_CDMA_NOT_EMERGENCY: return "not an emergency number";
+	case CALL_FAIL_CDMA_ACCESS_BLOCKED: return "access blocked";
+	default: return "unknown";
+	}
+}
+
+// This is called when RIL sends a response with a non-zero error code. It sends
+// a message to be written to a device if needed so that whoever sent the 
+// command can realize it didn't work.
 static void
 handle_error(int seq, int error)
 {
 	// RIL error messages
 	char *errmsgs[] = { "error: no error\n", "error: radio not available\n", "error: generic failure\n", "error: password incorrect\n", "error: need SIM PIN2\n", "error: need SIM PUK2\n", "error: request not supported\n", "error: cancelled\n", "error: cannot access network during voice calls\n", "error: cannot access network before registering to network\n", "error: retry sending sms\n", "error: no SIM\n", "error: no subscription\n", "error: mode not supported\n", "error: FDN list check failed\n", "error: illegal SIM or ME\n" };
 	char *errmsg = errmsgs[error];
+
+	DPRINT("RIL sent error (seq %d): %s", seq, errmsg);
+
 	switch(seq) {
 	case RIL_REQUEST_SEND_SMS:
 		listeners_produce(&sms_listeners, errmsg, strlen(errmsg));
 		break;
 	case RIL_REQUEST_DIAL:
 		listeners_produce(&phone_listeners, errmsg, strlen(errmsg));
+		// RIL sends a GENERIC_FAILURE error when the call fails
+		// for non-radio reasons, e.g. a busy signal
+		if(error == RIL_E_GENERIC_FAILURE) {
+			// ask RIL what went wrong and send the result to the
+			// device when we get the response later
+			get_call_fail_cause();
+		}
 		break;
 	case RIL_REQUEST_REGISTRATION_STATE:
 		status_msg.ready = -1;
@@ -567,13 +609,19 @@ handle_sol_response(struct parcel *p)
 					      malloc(sizeof(RIL_UUS_Info)) :
 					      NULL;
 			if(calls.cs[i].uusInfo != NULL) {
-				// not implemented yet
+				// not implemented
 				DPRINT("debug: got uusInfo\n");
 			}
 		}
 		calls.ready = 1;
 		Wakeup(&calls.r);
 		qunlock(&calls.l);
+		break;
+	case RIL_REQUEST_LAST_CALL_FAIL_CAUSE:
+		snprint(buf, sizeof(buf), "call fail cause: %s\n",
+			call_fail_str(parcel_r_int32(p)));
+		buf[sizeof(buf) - 1] = '\0';
+		listeners_produce(&phone_listeners, buf, strlen(buf));
 		break;
 	}
 }
@@ -739,7 +787,7 @@ activate_net(void)
 	parcel_init(&p);
 	parcel_w_int32(&p, RIL_REQUEST_SETUP_DATA_CALL); // request ID
 	parcel_w_int32(&p, RIL_REQUEST_SETUP_DATA_CALL); // reply id
-	parcel_w_int32(&p, 7); // undocumented magic.
+	parcel_w_int32(&p, 7); // hardcoded in java
 	parcel_w_string(&p, "1"); // CDMA or GSM. 1 = GSM
 	parcel_w_string(&p, "0"); // data profile. 0 = default
 	parcel_w_string(&p, "wap.cingular"); // APN name
@@ -861,6 +909,19 @@ hangup_current(void)
 	parcel_init(&p);
 	parcel_w_int32(&p, RIL_REQUEST_HANGUP_FOREGROUND_RESUME_BACKGROUND);
 	parcel_w_int32(&p, RIL_REQUEST_HANGUP_FOREGROUND_RESUME_BACKGROUND);
+
+	send_ril_parcel(&p);
+	parcel_free(&p);
+}
+
+static void
+get_call_fail_cause(void)
+{
+	struct parcel p;
+	
+	parcel_init(&p);
+	parcel_w_int32(&p, RIL_REQUEST_LAST_CALL_FAIL_CAUSE);
+	parcel_w_int32(&p, RIL_REQUEST_LAST_CALL_FAIL_CAUSE);
 
 	send_ril_parcel(&p);
 	parcel_free(&p);
