@@ -87,7 +87,7 @@ static struct listener_node *sms_listeners = NULL;
 static void loop_for_data(void *v);
 static void send_sms(char *smsc_pdu, char *pdu);
 static void dial(char *number);
-static void activate_net(void);
+static void activate_net(char *gsm, char *apn_name, char *apn_user, char *apn_passwd);
 static void deactivate_net(void);
 static void radio_power(int power);
 static void answer(void);
@@ -352,6 +352,9 @@ phonewrite(Chan *c, void *va, long n, vlong offset)
 
 	switch((ulong) c->qid.path) {
 	case Qctl:
+		// Here we just look for which commands were sent. The nesting
+		// can get pretty ugly for commands with a lot of parameters
+		// (sorry!)
 		if(strcmp(cmd->f[0], "on") == 0) {
 			radio_power(1);
 		} else if(strcmp(cmd->f[0], "off") == 0) {
@@ -359,7 +362,22 @@ phonewrite(Chan *c, void *va, long n, vlong offset)
 		} else if(strcmp(cmd->f[0], "net") == 0) {
 			if(cmd->nf >= 2) {
 				if(strcmp(cmd->f[1], "on") == 0) {
-					activate_net();
+					// Ugly to do a different thing for each
+					// # of parameters, but cmd->f is
+					// dynamically allocated so we can't
+					// just set cmd->f[cmd-nf:end] to NULL
+					switch(cmd->nf) {
+					case 2: activate_net(NULL, NULL, NULL, NULL);
+						break;
+					case 3: activate_net(cmd->f[2], NULL, NULL, NULL);
+						break;
+					case 4: activate_net(cmd->f[2], cmd->f[3], NULL, NULL);
+						break;
+					case 5: activate_net(cmd->f[2], cmd->f[3], cmd->f[4], NULL);
+						break;
+					default: activate_net(cmd->f[2], cmd->f[3], cmd->f[4], cmd->f[5]);
+						break;
+					}
 				} else if(strcmp(cmd->f[1], "off") == 0) {
 					deactivate_net();
 				}
@@ -815,8 +833,15 @@ dial(char *number)
 	parcel_free(&p);
 }
 
+// Turns on the data connection.
+// "gsm" indicates the network type--"gsm" for gsm, "cdma" for CDMA. apn_name,
+// apn_user, and apn_passwd should be self-explanatory, given that an APN is an
+// Access Point name, which specifies the data network to connect to. Your
+// wireless provider should give you this information on its website, or you can
+// just look around the Internet for it. The APN information is only needed for
+// GSM; for CDMA, leave those parameters NULL.
 static void
-activate_net(void)
+activate_net(char *network, char *apn_name, char *apn_user, char *apn_passwd)
 {
 	struct parcel p;
 
@@ -824,11 +849,14 @@ activate_net(void)
 	parcel_w_int32(&p, RIL_REQUEST_SETUP_DATA_CALL); // request ID
 	parcel_w_int32(&p, RIL_REQUEST_SETUP_DATA_CALL); // reply id
 	parcel_w_int32(&p, 7); // hardcoded in java
-	parcel_w_string(&p, "1"); // CDMA or GSM. 1 = GSM
+	if(network && strcmp(network, "cdma") == 0)
+		parcel_w_string(&p, "0"); // CDMA or GSM. 1 = GSM
+	else
+		parcel_w_string(&p, "1"); // CDMA or GSM. 1 = GSM
 	parcel_w_string(&p, "0"); // data profile. 0 = default
-	parcel_w_string(&p, "wap.cingular"); // APN name
-	parcel_w_string(&p, "WAP@CINGULARGPRS.COM"); // APN user
-	parcel_w_string(&p, "cingular1"); // APN passwd
+	parcel_w_string(&p, apn_name); // APN name
+	parcel_w_string(&p, apn_user); // APN user
+	parcel_w_string(&p, apn_passwd); // APN passwd
 	parcel_w_string(&p, "0"); // auth type. 0 usually
 
 	send_ril_parcel(&p);
@@ -843,8 +871,9 @@ deactivate_net(void)
 	parcel_init(&p);
 	parcel_w_int32(&p, RIL_REQUEST_DEACTIVATE_DATA_CALL); // request id
 	parcel_w_int32(&p, RIL_REQUEST_DEACTIVATE_DATA_CALL); // reply id
-	parcel_w_string(&p, "1"); // FIXME: this should be the CID returned by
-				  // RIL_REQUEST_SETUP_DATA_CALL response
+	parcel_w_string(&p, "1"); // this should be the CID returned by
+				  // RIL_REQUEST_SETUP_DATA_CALL response,
+	                          // but it seems to always be 1
 	send_ril_parcel(&p);
 	parcel_free(&p);
 }

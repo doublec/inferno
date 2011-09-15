@@ -1,23 +1,33 @@
 ===Phone interface===
 Turn on the radio (you'll want to do this before anything else):
  echo on > /phone/ctl
+
 Turn off the radio:
  echo off > /phone/ctl
-Turn on the data connection:
- echo net on > /phone/ctl
+
+Turn on the data connection (APN information is omitted if on CDMA):
+ echo net on <gsm/cdma> <APN name> <APN user> <APN password> > /phone/ctl
+For example, on AT&T this would be:
+ echo net on gsm wap.cingular WAP@CINGULARGPRS.COM cingular1 > /phone/ctl
+
 Turn off the data connection:
  echo net off > /phone/ctl
+
 Route the audio to a different device:
  echo route <earpiece/speaker/headphone> > /phone/ctl
+
 Change the call volume:
  echo volume <0-5> > /phone/ctl
+
 Mute/unmute your microphone:
  echo <mute/unmute> > /phone/ctl
 
 Dial a number:
  echo dial <number> > /phone/phone
+
 Hang up a call:
  echo hangup > /phone/phone
+
 Pick up an incoming call:
  echo answer > /phone/phone
 
@@ -31,6 +41,14 @@ before Inferno starts it will still return "off."
 
 /phone/signal gives you the raw signal strength value, 0-30 or 99 for
 failure. It may be different for CDMA phones.
+
+Reading from /phone/status returns a radio status message. The
+contents can vary depending on whether you're on CDMA or GSM (see
+hardware/ril/include/telephony/ril.h for details on the
+RIL_REQUEST_REGISTRATION_STATE response). The most useful information
+is the registration status message, which is always the first line in
+the data. It tells you whether you're registered to the cell network
+or not.
 
 Reading from /phone/phone will give you messages when the phone rings
 and when the call state has changed. You should read from /phone/calls
