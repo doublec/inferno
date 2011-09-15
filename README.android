@@ -1,5 +1,5 @@
 ===Phone interface===
-Turn on the radio:
+Turn on the radio (you'll want to do this before anything else):
  echo on > /phone/ctl
 Turn off the radio:
  echo off > /phone/ctl
@@ -23,6 +23,14 @@ Pick up an incoming call:
 
 Send an SMS:
  echo send <number> <quoted message> > /phone/sms
+
+Reading from /phone/ctl returns "off" or "on" depending on whether the
+driver thinks the radio is off or on. There's no way to query the
+power state from RIL, though, so if you have the radio powered on
+before Inferno starts it will still return "off."
+
+/phone/signal gives you the raw signal strength value, 0-30 or 99 for
+failure. It may be different for CDMA phones.
 
 Reading from /phone/phone will give you messages when the phone rings
 and when the call state has changed. You should read from /phone/calls

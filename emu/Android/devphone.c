@@ -481,6 +481,34 @@ call_fail_str(int err)
 	}
 }
 
+// get a string describing the current registration state from the first string
+// response that the RIL_REQUEST_REGISTRATION_STATE response gives us
+static char*
+reg_state_str(char *s)
+{
+	if(strcmp(s, "0") == 0) {
+		return "not registered";
+	} else if(strcmp(s, "1") == 0) {
+		return "registered on home network";
+	} else if(strcmp(s, "2") == 0) {
+		return "searching for network";
+	} else if(strcmp(s, "3") == 0) {
+		return "registration denied";
+	} else if(strcmp(s, "4") == 0) {
+		return "unknown registration state";
+	} else if(strcmp(s, "5") == 0) {
+		return "roaming";
+	} else if(strcmp(s, "10") == 0) {
+		return "not registered, emergency calls available";
+	} else if(strcmp(s, "12") == 0) {
+		return "searching for network, emergency calls available";
+	} else if(strcmp(s, "13") == 0) {
+		return "registration denied, emergency calls available";
+	} else if(strcmp(s, "14") == 0) {
+		return "unknown registration state, emergency calls available";
+	}
+}
+
 // This is called when RIL sends a response with a non-zero error code. It sends
 // a message to be written to a device if needed so that whoever sent the 
 // command can realize it didn't work.
@@ -554,9 +582,17 @@ handle_sol_response(struct parcel *p)
 		if(!parcel_data_avail(p)) return;
 		num = parcel_r_int32(p);
 		offset = 0;
-		for(i = 0; i < num; i++) {
-			offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", parcel_r_string(p));
+		// get the registration status string and make it human-readable
+		offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", reg_state_str(parcel_r_string(p)));
+		// get the rest of the data--this varies depending on whether
+		// you use CDMA/GSM so there's not much we can do about making
+		// it both easily and portably human-readable
+		for(i = 1; i < num; i++) {
+			char *ret = parcel_r_string(p);
+			if(ret == NULL) continue;
+			offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", ret);
 		}
+		buf[sizeof(buf) - 1] = '\0';
 		free(status_msg.msg);
 		status_msg.msg = strdup(buf);
 		status_msg.ready = 1;
