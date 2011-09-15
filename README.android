@@ -1,3 +1,12 @@
+===Usage===
+
+Just run /data/inferno/Android/arm/bin/emu-g. It's
+possible to run Inferno (without graphics) in parallel with zygote
+(the Android java layer). Don't touch the radio if the Java layer's
+running; your phone will probably freeze. The phone device is mounted
+automatically. If you want to change this, look in emu/port/main.c for
+where it mounts the device #f.
+
 ===Phone interface===
 Turn on the radio (you'll want to do this before anything else):
  echo on > /phone/ctl
@@ -34,6 +43,8 @@ Pick up an incoming call:
 Send an SMS:
  echo send <number> <quoted message> > /phone/sms
 
+Reading from /phone/sms gives you SMS messages as they come in.
+
 Reading from /phone/ctl returns "off" or "on" depending on whether the
 driver thinks the radio is off or on. There's no way to query the
 power state from RIL, though, so if you have the radio powered on
@@ -66,3 +77,26 @@ other party. The state is a value 0-5:
 |     3 | Alerting |
 |     4 | Incoming |
 |     5 | Waiting  |
+
+===Building=== 
+
+Before you build for the Android, you need to compile the Inferno
+tools for x86. Change mkconfig to include SYSHOST=Linux and
+OBJTYPE=386. Run makemk.sh, then run mk nuke. When you mk install,
+you'll run into errors--this is because of the changes to make Inferno
+play nicely with bionic. Run mk install in the directory of each tool
+and library you need (lib9, libmath, utils/iyacc, limbo, and maybe
+more). After you have a full toolset, change SYSHOST back to Android
+and OBJTYPE back to arm. Run mk nuke, mk install, then push your
+inferno directory over to your phone using adb push or the
+parallel-push.sh script. Make sure to place your Inferno directory to
+match the ROOT variable in mkconfig (we suggest using /data/inferno
+for your ROOT).
+
+===Porting===
+
+For porting to a new Android phone, take a look at emu/port/main.c,
+emu/Android/framebuffer.c, and emu/Android/screen.c. Most of the work
+should be finding out which device is the touchscreen input and
+handling that correctly. If you want buttonserver to work correctly,
+create a config file in /data/inferno/etc.
