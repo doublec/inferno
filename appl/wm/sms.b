@@ -83,6 +83,7 @@ init(ctxt: ref Draw->Context, nil: list of string)
 		tk->cmd(t, conv_window[i]);
 
 	convs := loadconvos();
+	tk->cmd(t, ".f.lb insert end New");
 	for (; convs != nil; convs = tl convs)
 		tk->cmd(t, ".f.lb insert end '"+ hd convs);
 
@@ -110,7 +111,10 @@ init(ctxt: ref Draw->Context, nil: list of string)
 			sys->print("read %s\n", u);
 			if (u != nil) {
 				#break;
-				spawn readthread(ctxt, u);
+				if (u == "New")
+					spawn newmsg(ctxt);
+				else 
+					spawn readthread(ctxt, u);
 			}
 			tk->cmd(t, ".f.lb selection clear 0");
 			}
@@ -122,6 +126,53 @@ init(ctxt: ref Draw->Context, nil: list of string)
 			tkclient->wmctl(t, s);
 		}
 
+	}
+}
+
+newmsg(ctxt: ref Draw->Context)
+{
+	(t, wmchan) := tkclient->toplevel(ctxt, nil, "New message", 0);
+	cmd := chan of string;
+	tk->namechan(t, cmd, "cmd");
+
+	tk->cmd(t, "frame .f");
+	tk->cmd(t, "label .f.l -font /fonts/lucida/unicode.12.font -text {Enter Number}");
+	tk->cmd(t, "entry .f.e -font /fonts/lucida/unicode.12.font");
+	tk->cmd(t, "button .f.b -text {Ok} -font /fonts/lucida/unicode.12.font -command {send cmd ok}");
+	tk->cmd(t, "pack .f.l .f.e .f.b -in .f");
+	tk->cmd(t, "pack .f");
+	tk->cmd(t, ".pack propagate . 0");
+	tk->cmd(t, "update");
+	tkclient->onscreen(t, "onscreen");
+
+	tkclient->startinput(t, "kbd"::"ptr"::nil);
+	for (;;) {
+		alt {
+		s := <-t.ctxt.kbd =>
+			tk->keyboard(t, s);
+		s := <-t.ctxt.ptr =>
+			tk->pointer(t, *s);
+		s := <-t.ctxt.ctl or
+		s = <-t.wreq or
+		s = <-wmchan =>
+				tkclient->wmctl(t, s);
+		s := <-cmd =>
+			sys->print("read %s\n", s);
+			if (s == "ok") {
+				num := tk->cmd(t, ".f.e get");
+				sys->print("number: %s\n", num);
+
+				filename := "/usr/"+rf("/dev/user")+"/lib/sms/"+num;
+
+				(ret, dir) := sys->stat(filename);
+				if (ret == -1) {
+					fd := sys->create(filename, Sys->OWRITE, 8r770);
+					#fd.close(fd);
+				}
+				spawn readthread(ctxt, num);
+				return;
+			}
+		}
 	}
 }
 
@@ -216,6 +267,7 @@ convupdater(t: ref Tk->Toplevel, pid: chan of int)
 		if (dirstat.mtime > lastmtime) {
 			convs := loadconvos();
 			tk->cmd(t, ".f.lb delete 0 end");
+			tk->cmd(t, ".f.lb insert end New");
 			for (; convs != nil; convs = tl convs)
 				tk->cmd(t, ".f.lb insert end '"+ hd convs);
 			tk->cmd(t, "update");
