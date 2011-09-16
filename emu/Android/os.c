@@ -34,7 +34,7 @@ enum
 	NSTACKSPERALLOC = 16,
 	X11STACK=	256*1024
 };
-char *hosttype = "Linux";
+char *hosttype = "Android";
 
 extern void unlockandexit(int*);
 extern void executeonnewstack(void*, void (*f)(void*), void*);

@@ -453,10 +453,6 @@ extern	Queue*	gkbdq;
 extern	Queue*	gkscanq;
 extern	int	Xsize;
 extern	int	Ysize;
-extern  int     rotation_opt;
-extern  char    **eventfiles;
-extern  int     eventfds[MAX_EVENTFDS];
-extern  Queue   *eventq;
 extern	Pool*	mainmem;
 extern	char	rootdir[MAXROOT];		/* inferno root */
 extern	Procs	procs;
@@ -466,11 +462,19 @@ extern	int	globfs;
 extern	int	greyscale;
 extern	uint	qiomaxatomic;
 extern	int	displaydepth;
+
+// Android stuff
+extern  char    **eventfiles;
+extern  int     eventfds[MAX_EVENTFDS];
+extern  Queue   *eventq;
+#ifdef ANDROID
+extern  int     rotation_opt;
 extern	char*	mousefile;
 extern	char	type;
 extern	int	maineventnum;
 extern	char*	homedevice;
 extern	char*	voldevice;
+#endif
 
 /*
  * floating point control and status register masks

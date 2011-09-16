@@ -30,7 +30,7 @@ enum
 	NSTACKSPERALLOC = 16,
 	X11STACK=	256*1024
 };
-char *hosttype = "Linux";
+char *hosttype = "Android";
 
 typedef sem_t	Sem;
 

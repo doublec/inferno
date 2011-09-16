@@ -6,8 +6,9 @@
 #include	"draw.h"
 #include	"version.h"
 
-/* Android thing */
+#ifdef ANDROID
 #include <cutils/properties.h>
+#endif
 
 int		rebootargc = 0;
 char**		rebootargv;
@@ -15,12 +16,6 @@ static	char	*imod = "/dis/emuinit.dis";
 extern	char*	hosttype;
 char*	tkfont;	/* for libtk/utils.c */
 int	tkstylus;	/* libinterp/tk.c */
-char*	mousefile = "/dev/input/event0";
-char	type = 's';
-int	maineventnum = 5;
-char*	homedevice = "/dev/input/event5";
-char*	voldevice = "/dev/input/event2";
-char    **eventfiles = NULL;
 extern	int	mflag;
 	int	dflag;
 	int vflag;
@@ -37,6 +32,15 @@ extern	int	mflag;
 	ulong	displaychan;
 	int	displaydepth;
 char *cputype;
+
+#ifdef ANDROID
+char*	mousefile = "/dev/input/event0";
+char	type = 's';
+int	maineventnum = 5;
+char*	homedevice = "/dev/input/event5";
+char*	voldevice = "/dev/input/event2";
+#endif
+char    **eventfiles = NULL;
 
 static void
 usage(void)
@@ -257,8 +261,8 @@ main(int argc, char *argv[])
 	}
 	option(argc, argv, usage);
 
+#ifdef ANDROID
 	/* Set up Android-specific things */
-	/* This will definitely need to be factored out later */
 	tkfont = "/fonts/pelm/ascii.12.font";
 	property_get("ro.product.device", device, "");
 	print("read ro.product.device = %s\n", device);
@@ -312,6 +316,7 @@ main(int argc, char *argv[])
 		voldevice = "/dev/input/event0";
 		maineventnum = 0;
 	}
+#endif
 
 	eve = strdup("inferno");
 
