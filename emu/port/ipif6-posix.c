@@ -295,8 +295,8 @@ resolve(char *name, char **hostv, int n, int isnumeric)
 	hints.ai_socktype = SOCK_STREAM;
 #ifdef ANDROID
 	// environ points nowhere -- why?
-	environ = malloc(sizeof(char));
-	*environ = '\0';
+	char *nul = NULL;
+	environ = &nul;
 #endif
 	if(getaddrinfo(name, nil, &hints, &res0) < 0) {
 		return 0;
