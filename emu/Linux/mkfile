@@ -28,6 +28,7 @@ OBJ=\
 	devphone.$O\
 	parcel.$O\
 	smsutils.$O\
+	listenerqueue.$O\
 	$CONF.root.$O\
 	lock.$O\
 	$DEVS\

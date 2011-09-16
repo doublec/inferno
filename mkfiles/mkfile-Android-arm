@@ -1,0 +1,28 @@
+TARGMODEL=	Posix
+TARGSHTYPE=	sh
+CPUS=		arm
+
+O=		o
+OS=		o
+
+AR=		ar
+ARFLAGS=	ruvs
+
+AS=		agcc -c 
+ASFLAGS=
+
+CC=		agcc -c 
+CFLAGS=		-O\
+		-I$ROOT/Android/arm/include\
+		-I$ROOT/include\
+		-DLINUX_ARM\
+		-DINFERNO
+
+ANSICPP=
+LD=		agcc 
+LDFLAGS=	
+
+SYSLIBS=
+
+YACC=		iyacc
+YFLAGS=		-d

@@ -46,7 +46,7 @@ menu := array[] of {
 	"Charon", "charon",
 	"Manual", "wm/man",
 	"Shell", "wm/sh",
-	"Calendar", "wm/calendar",
+	"Dialer", "wm/dialer",
 	"SMS", "wm/sms",
 	"->System", "folder:1",
 	"->Misc", "folder:2",
@@ -62,7 +62,8 @@ menu := array[] of {
 	"Colors", "wm/colors",
 	"Coffee", "wm/coffee",
 	"Polyhedra", "wm/polyhedra",
-	"Fractals", "wm/mand"
+	"Fractals", "wm/mand",
+	"Calendar", "wm/calendar",
 	}, array[] of { # folder 3
 	"Tetris", "wm/tetris",
 	"Bounce", "wm/bounce",

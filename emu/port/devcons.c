@@ -5,6 +5,7 @@
 #include	"mp.h"
 #include	"libsec.h"
 #include	"keyboard.h"
+#include        "listenerqueue.h"
 #include        <stdio.h>
 
 extern int cflag;
@@ -112,66 +113,13 @@ static struct
 	int	count;
 } kbd;
 
-struct event_queue {
-	Queue *q;
-	struct event_queue *next;
-};
-
-static struct event_queue *event_queue_head = NULL;
+struct listener *event_listeners = NULL;
 
 #ifndef __linux__
 void eventslave(void *a) {
 	fprintf(stderr, "Events device currently only supported under Linux hosts\n");
 }
 #endif
-
-void add_event_queue(Queue *q)
-{
-	struct event_queue *node = malloc(sizeof(struct event_queue));
-
-	node->next = NULL;
-	node->q = q;
-
-	if(event_queue_head == NULL) {
-		event_queue_head = node;
-	} else {
-		struct event_queue *cur;
-		for(cur = event_queue_head; ; cur = cur->next) {
-			if(cur->next == NULL) {
-				cur->next = node;
-				break;
-			}
-		}
-	}
-}
-
-void del_event_queue(Queue *q)
-{
-	struct event_queue *cur, *prev;
-
-	prev = NULL;
-	for(cur = event_queue_head; cur != NULL; cur = cur->next) {
-		if(cur->q == q) {
-			if(prev != NULL) {
-				prev->next = cur->next;
-			} else {
-				event_queue_head = cur->next;
-			}
-			free(cur);
-			break;
-		}
-		prev = cur;
-	}
-}
-
-// Send a message to all queues in the event queue list
-void event_queue_produce(char *str)
-{
-	struct event_queue *cur;
-	for(cur = event_queue_head; cur != NULL; cur = cur->next) {
-		qproduce(cur->q, str, strlen(str));
-	}
-}
 
 void
 kbdslave(void *a)
@@ -349,7 +297,7 @@ consopen(Chan *c, int omode)
 		break;
 	case Qevents:
 		c->aux = qopen(512, 0, nil, nil);
-		add_event_queue(c->aux);
+		add_listener(&event_listeners, c->aux);
 		break;
 	}
 	return c;
@@ -384,7 +332,7 @@ consclose(Chan *c)
 		wunlock(&kprintq.l);
 		break;
 	case Qevents:
-		del_event_queue(c->aux);
+		del_listener(&event_listeners, c->aux);
 		qfree(c->aux);
 		c->aux = NULL;
 		break;

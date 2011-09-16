@@ -245,7 +245,7 @@ readthread(ctxt: ref Draw->Context, u: string)
 				# open the SMS file
 				sendfile := bio->open("/phone/sms", bio->OWRITE);
 				if (sendfile != nil) {
-					bio->sendfile.puts("send " + u + " " + txt);
+					bio->sendfile.puts("send " + u + " " + sys->sprint("%q", txt));
 					bio->sendfile.close();
 				} else {
 					sys->fprint(sys->fildes(2), "can't open /phone/sms\n");

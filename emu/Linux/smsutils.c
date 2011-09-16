@@ -7,7 +7,8 @@
 /* SMS-related functions */
 
 // writes UTF-8 translation to out and returns number of bytes written
-int gsm_to_utf8(char gsm, char *out)
+int
+gsm_to_utf8(char gsm, char *out)
 {
 	switch(gsm) {
 	case '\0': *out = '@'; return 1;
@@ -59,7 +60,8 @@ int gsm_to_utf8(char gsm, char *out)
 }
 
 // Unicode to GSM SMS format, returns number of bytes written to out
-int rune_to_gsm(Rune r, char *out)
+int
+rune_to_gsm(Rune r, char *out)
 {
 	switch(r) {
 	case L'@': *out = 0; return 1;
@@ -118,13 +120,13 @@ int rune_to_gsm(Rune r, char *out)
 	}
 }
 
-char *hexify(char *bytes, size_t len)
+static char*
+hexify(char *bytes, size_t len)
 {
-	char *hexarray[256];
+	char hexarray[256][3];
 	int i, j;
 	char *ret;
 	for(i = 0; i < 256; i++) {
-		hexarray[i] = (char *) malloc(3 * sizeof(char));
 		snprintf(hexarray[i], 3, "%02x", i);
 	}
 	ret = (char *) malloc((len * 2 + 1) * sizeof(char));
@@ -133,41 +135,42 @@ char *hexify(char *bytes, size_t len)
 		ret[j + 1] = hexarray[(unsigned char) bytes[i]][1];
 	}
 	ret[j] = '\0';
-	for(i = 0; i < 256; i++) {
-		free(hexarray[i]);
-	}
 	return ret;
 }
 
-int decode_sms(char *hexstr, struct recvd_sms *sms)
+int
+decode_sms(char *hexstr, struct recvd_sms *sms)
 {
 	int smsc_len, src_len, curpos, msg_len;
-	char *endptr;
 	char **bytes;
-	char *service_center, *src_num, *timestamp, *msg;
+	char *service_center, *src_num, *msg;
 	int len, i, j, oldbits, numoldbits, utf8msglen = 0;
 	char msgbytes[160];
-    
-	/* first, split the string up into hex representations of the bytes--
-	   this makes things much easier overall */
+
 	len = strlen(hexstr);
 	if(len % 2 != 0) {
+		// if the hex string is not an even number of characters in
+		// length, something is very wrong
 		fprintf(stderr, "malformed hex string passed to decode_sms\n");
 		return -1;
 	}
-	bytes = (char **) malloc((len / 2) * sizeof(char *));
+
+	/* first, split the string up into an array of hex representations of
+	   the bytes--this makes things much easier overall */
+	bytes = malloc((len / 2) * sizeof(char *));
 	for(i = 0; i < len / 2; i++) {
-		bytes[i] = (char *) malloc(3 * sizeof(char));
+		bytes[i] = malloc(3 * sizeof(char));
 		bytes[i][0] = hexstr[i * 2];
 		bytes[i][1] = hexstr[i * 2 + 1];
 		bytes[i][2] = '\0';
 	}
 
 	// decode the service center number
-	smsc_len = strtol(bytes[0], &endptr, 16);
+	smsc_len = strtol(bytes[0], NULL, 16);
 	if(strcmp(bytes[1], "91")) {
 		fprintf(stderr, "unsupported number format for sender: %s",
 			bytes[1]);
+		return -1;
 	}
 	service_center = malloc((smsc_len*2 + 2) * sizeof(char));
 	for(i = 2, j = 0; i < smsc_len + 1; i++, j += 2) {
@@ -190,11 +193,15 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 	src_len = (src_len % 2 == 0) ? src_len : src_len + 1;
 	src_len = src_len / 2;
 	if(strcmp(bytes[curpos + 2], "91")) {
+		// 0x91 means "international format" and is the only format
+		// I've ever seen in received SMSes
 		fprintf(stderr, "unsupported number format for sender: %s",
 			bytes[curpos + 2]);
+		return -1;
 	}
+	// the number is nibble-swapped (character-swapped in the hex string),
+	// so we have to unswap it for it to be correct
 	for(i = curpos + 3, j = 0; i < curpos + 3 + src_len; i++, j += 2) {
-		// number is nibble-swapped
 		src_num[j] = bytes[i][1];
 		if(bytes[i][0] == 'f') { // num may be padded with 'f' at end
 			src_num[j + 1] = '\0';
@@ -207,29 +214,23 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 	curpos = i;
 
 	// Timestamp
-	// TODO: may want to convert this to a time_t value as well
-	
-	timestamp = (char *) malloc(15 * sizeof(char));
-	for(i = curpos + 2, j = 0; i < curpos + 9; i++, j += 2) {
-		// number is nibble-swapped
-		timestamp[j] = bytes[i][1];
-		timestamp[j + 1] = bytes[i][0];
-	}
-	curpos = i;
-	timestamp[j] = '\0';
-	sms->timestamp = timestamp;
+	// timestamp is swapped
+	sms->timestamp = smprint("20%c%c-%c%c-%c%c %c%c:%c%c:%c%c", bytes[curpos + 2][1], bytes[curpos + 2][0], bytes[curpos + 3][1], bytes[curpos + 3][0], bytes[curpos + 4][1], bytes[curpos + 4][0], bytes[curpos + 5][1], bytes[curpos + 5][0], bytes[curpos + 6][1], bytes[curpos + 6][0], bytes[curpos + 7][1], bytes[curpos + 7][0]);
+	curpos = curpos + 9;
 
 	// Message
 
+	// convert the hex string back into its binary form, since it'll
+	// be much easier to do the bit-manipulation we need to perform
 	msg_len = (len / 2) - (curpos + 1);
 	for(i = curpos + 1, j = 0; i < len / 2, j < msg_len; i++, j++) {
 		msgbytes[j] = strtol(bytes[i], NULL, 16);
 	}
-	// FIXME?
+	// FIXME? if we get more than 161 characters somehow this would break
 	utf8msglen = UTFmax*161;
 	msg = (char *) malloc((utf8msglen + 1) * sizeof(char));
 
-	// convert message to UTF-8
+	// convert message from packed GSM alphabet to UTF-8
 	oldbits = 0;
 	numoldbits = 0;
 	for(i = 0, j = 0; i < msg_len; i++) {
@@ -242,8 +243,7 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 		// GSM alphabet is different than UTF-8 alphabet
 		j += gsm_to_utf8(msgbytes[i] | oldbits, msg + j);
 		if(numbits == 7) {
-			msg[j] = newbits;
-			j++;
+			j += gsm_to_utf8(newbits, msg + j);
 			newbits = 0;
 			numbits = 0;
 		}
@@ -260,27 +260,28 @@ int decode_sms(char *hexstr, struct recvd_sms *sms)
 	return 0;
 }
 
-char *encode_sms(char *destnum, Rune *runemsg)
+char*
+encode_sms(char *destnum, Rune *runemsg)
 {
-	int i, j, actual_dest_len, enc_msg_len, ret_len, msg_len;
-	char dest_len[3];
-	char *dest;
-	char *enc_msg, *final_msg, *ret, *msg;
-	// dest_len is the hex representation of the length of the phone #
-	snprintf(dest_len, 3, "%02x", strlen(destnum));
-	actual_dest_len = (strlen(destnum) % 2 == 0) ? strlen(destnum) : strlen(destnum) + 1;
-	dest = (char *) malloc((actual_dest_len + 1) * sizeof(char));
-	for(i = 0; i < actual_dest_len; i += 2) {
+	int i, j, padded_dest_len, packed_msg_len, ret_len, msg_len;
+	char *dest, *packed_msg, *final_msg, *ret, *msg;
+
+	// the destination number needs to be nibble-swapped and padded out to
+	// an even number of bytes
+	padded_dest_len = (strlen(destnum) % 2 == 0) ? strlen(destnum) : strlen(destnum) + 1;
+	dest = malloc((padded_dest_len + 1) * sizeof(char));
+	for(i = 0; i < padded_dest_len; i += 2) {
 		if(destnum[i + 1] != '\0') {
 			dest[i] = destnum[i + 1];
 		} else {
+			// pad with an 0xf at end if needed
 			dest[i] = 'f';
 		}
 		dest[i + 1] = destnum[i];
 	}
 	dest[i] = '\0';
-//	printf("dest = %s\n", dest);
 
+	// convert the Unicode rune string to a string in the GSM 7-bit alphabet
 	msg = malloc(UTFmax * (runestrlen(runemsg) + 1) * sizeof(char));
 	for(i = 0, j = 0; i < runestrlen(runemsg); i++) {
 		j += rune_to_gsm(runemsg[i], msg + j);
@@ -288,8 +289,10 @@ char *encode_sms(char *destnum, Rune *runemsg)
 	msg[j] = '\0';
 	msg_len = j;
 
-	enc_msg_len = msg_len - (msg_len / 8);
-	enc_msg = (char *) malloc((enc_msg_len + 1) * sizeof(char));
+	// pack the GSM 7-bit characters into an 8-bit string efficiently
+	// for details see http://www.dreamfabric.com/sms/hello.html
+	packed_msg_len = msg_len - (msg_len / 8);
+	packed_msg = malloc((packed_msg_len + 1) * sizeof(char));
 	for(i = 0, j = 0; i < msg_len; i++, j++) {
 		int numbits = (i + 1) % 8;
 		char bits;
@@ -298,17 +301,19 @@ char *encode_sms(char *destnum, Rune *runemsg)
 			continue;
 		}
 		bits = msg[i + 1] & ((1 << numbits) - 1);
-		enc_msg[j] = msg[i] >> numbits - 1;
-//			printf("once shifted by %d: %hhx\n", numbits, enc_msg[j]);
-		enc_msg[j] = enc_msg[j] | (bits << (8 - numbits));
-//			printf("bits << (8 - numbits) %hhx\n", bits << (8 - numbits));
+		packed_msg[j] = msg[i] >> numbits - 1;
+		packed_msg[j] = packed_msg[j] | (bits << (8 - numbits));
 	}
-	final_msg = hexify(enc_msg, enc_msg_len);
-	ret_len = 14 + strlen(dest) + strlen(final_msg);
-	ret = (char *) malloc((ret_len + 1) * sizeof(char));
+
+	// convert the raw message into a hex string
+	final_msg = hexify(packed_msg, packed_msg_len);
+
+	// finally, create the full PDU for the message
 	// FIXME: too much of the sent msg is hardcoded
-	snprintf(ret, ret_len + 1, "0120%s91%s0000%02x%s", dest_len, dest, msg_len, final_msg);
-	free(enc_msg);
+	ret_len = 14 + strlen(dest) + strlen(final_msg);
+	ret = malloc((ret_len + 1) * sizeof(char));
+	snprintf(ret, ret_len + 1, "0120%02x91%s0000%02x%s", strlen(destnum), dest, msg_len, final_msg);
+	free(packed_msg);
 	free(final_msg);
 	free(dest);
 	return ret;
