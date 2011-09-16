@@ -288,6 +288,7 @@ resolve(char *name, char **hostv, int n, int isnumeric)
 	char buf[5*8];
 	uchar addr[IPaddrlen];
 	struct addrinfo hints;
+	char *nul = NULL;
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_flags = isnumeric? AI_NUMERICHOST: 0;
@@ -295,7 +296,6 @@ resolve(char *name, char **hostv, int n, int isnumeric)
 	hints.ai_socktype = SOCK_STREAM;
 #ifdef ANDROID
 	// environ points nowhere -- why?
-	char *nul = NULL;
 	environ = &nul;
 #endif
 	if(getaddrinfo(name, nil, &hints, &res0) < 0) {
