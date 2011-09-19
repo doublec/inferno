@@ -5,6 +5,9 @@ Linux/386/lib/*
 Linux/arm/bin/*
 Linux/arm/lib/*
 
+Android/arm/bin/*
+Android/arm/lib/*
+
 *.dis
 *.o
 o.*
