@@ -244,12 +244,19 @@ readthread(ctxt: ref Draw->Context, u: string)
 
 				# open the SMS file
 				sendfile := bio->open("/phone/sms", bio->OWRITE);
+				writeout := bio->open("/usr/"+rf("/dev/user")+"/lib/sms/"+u, bio->OWRITE);
+				bio->writeout.seek(big 0, Sys->SEEKEND);
 				if (sendfile != nil) {
 					bio->sendfile.puts("send " + u + " " + sys->sprint("%q", txt));
+					bio->writeout.puts("Me: " + sys->sprint("%q", txt)+"\n");
+					tk->cmd(t, ".compose.t delete 1.0 end");
+					tk->cmd(t, "update");
 					bio->sendfile.close();
 				} else {
 					sys->fprint(sys->fildes(2), "can't open /phone/sms\n");
+					bio->writeout.puts("Couldn't open phone file...\n");
 				}
+				bio->writeout.close();
 			}
 		}
 	}
