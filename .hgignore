@@ -8,6 +8,8 @@ Linux/arm/lib/*
 Android/arm/bin/*
 Android/arm/lib/*
 
+android/work/*
+
 *.dis
 *.o
 o.*
