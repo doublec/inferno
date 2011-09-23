@@ -39,7 +39,7 @@ LIBNAMES=${LIBS:%=lib%.a}
 HFILES=\
 
 CFLAGS='-DROOT="'$ROOT'"' -DUSE_PTHREADS -DEMU -I. -I../port -I$ROOT/$SYSTARG/$OBJTYPE/include -I$ROOT/include -I$ROOT/libinterp $CTHREADFLAGS $CFLAGS $EMUOPTIONS
-SYSLIBS= $X11LIBS -lm -lcutils -ldl -lutils#-lpthread
+SYSLIBS= $X11LIBS -lm -lcutils -ldl -lutils -lOpenSLES#-lpthread
 KERNDATE=`{$NDATE}
 
 default:V:	$O.$CONF

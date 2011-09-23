@@ -45,7 +45,7 @@ Audio_d Default_Audio_Format =  {
 	2,				/* number of channels */
 	-1,				/* device */
 	Audio_Pcm_Val,			/* encoding format */
-	8000,				/* samples per second */
+	44100,				/* samples per second */
 	Audio_Max_Val,			/* left channel gain */
 	Audio_Max_Val,			/* right channel gain */
 };

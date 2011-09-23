@@ -3,7 +3,7 @@
 #include "error.h"
 #include "audio.h"
 #include <sys/ioctl.h>
-#include <sys/soundcard.h>
+#include <linux/soundcard.h>
 
 #define 	Audio_Mic_Val		SOUND_MIXER_MIC
 #define 	Audio_Linein_Val	SOUND_MIXER_LINE
@@ -19,8 +19,10 @@
 #include "audio-tbls.c"
 #define	min(a,b)	((a) < (b) ? (a) : (b))
 
-#define DEVAUDIO	"/dev/dsp"
-#define DEVMIXER	"/dev/mixer"
+//#define DEVAUDIO	"/dev/dsp"
+//#define DEVMIXER	"/dev/mixer"
+#define DEVAUDIO	"/dev/snd/pcmC0D0p"
+#define DEVMIXER	"/dev/snd/controlC0"
 
 #define DPRINT if(1)print
 
@@ -72,12 +74,16 @@ audio_file_open(Chan *c, int omode)
 		error(Einuse);
 	if(afd.ctl < 0){
 		afd.ctl = open(DEVMIXER, ORDWR);
-		if(afd.ctl < 0)
+		if(afd.ctl < 0) {
+			DPRINT("couldn't open devmixer\n");
 			oserror();
+		}
 	}
 	afd.data = audio_open(omode);
-	if(afd.data < 0)
+	if(afd.data < 0) {
+		DPRINT("couldn't open devaudio\n");
 		oserror();
+	}
 	poperror();
 	qunlock(&afd.lk);
 }
@@ -388,6 +394,7 @@ audio_open(int omode)
 
 	if(!audio_pause(fd, A_Pause)){
 		close(fd);
+		DPRINT("couldn't set pause\n");
 		error(Eio);
 	}
 

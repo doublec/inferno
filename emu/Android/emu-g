@@ -22,7 +22,7 @@ dev
 
 	ip	ipif6-posix ipaux
 	eia
-#	audio	audio
+	audio	audio-android
 	mem
 	phone
 

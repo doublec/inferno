@@ -48,6 +48,7 @@ menu := array[] of {
 	"Shell", "wm/sh",
 	"Dialer", "wm/dialer",
 	"SMS", "wm/sms",
+	"Zygote", "startzygote",
 	"->System", "folder:1",
 	"->Misc", "folder:2",
 	"->Games", "folder:3"
