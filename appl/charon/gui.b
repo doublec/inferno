@@ -26,11 +26,11 @@ WINDOW, CTLS, PROG, STATUS, BORDER, EXIT: con 1 << iota;
 REQD: con ~0;
 
 cfg := array[] of {
-	(REQD,	"entry .ctlf.url -bg white -font /fonts/lucidasans/unicode.7.font -height 16"),
-	(REQD,	"button .ctlf.back -bd 1 -command {send gctl back} -state disabled -text {back} -font /fonts/lucidasans/unicode.7.font"),
-	(REQD,	"button .ctlf.stop -bd 1 -command {send gctl stop} -state disabled -text {stop} -font /fonts/lucidasans/unicode.7.font"),
-	(REQD,	"button .ctlf.fwd -bd 1 -command {send gctl fwd} -state disabled -text {next} -font /fonts/lucidasans/unicode.7.font"),
-	(REQD,	"label .status.status -bd 1 -font /fonts/lucidasans/unicode.6.font -height 14 -anchor w"),
+	(REQD,	"entry .ctlf.url -bg white -font /fonts/lucidasans/unicode.10.font"),
+	(REQD,	"button .ctlf.back -bd 1 -command {send gctl back} -state disabled -text {back} -font /fonts/lucidasans/unicode.10.font"),
+	(REQD,	"button .ctlf.stop -bd 1 -command {send gctl stop} -state disabled -text {stop} -font /fonts/lucidasans/unicode.10.font"),
+	(REQD,	"button .ctlf.fwd -bd 1 -command {send gctl fwd} -state disabled -text {next} -font /fonts/lucidasans/unicode.10.font"),
+	(REQD,	"label .status.status -bd 1 -font /fonts/lucidasans/unicode.8.font -height 14 -anchor w"),
 	(REQD,	"button .ctlf.exit -bd 1 -bitmap exit.bit -command {send wm_title exit}"),
 	(REQD,	"frame .f -bd 0"),
 	(BORDER,	".f configure -bd 2 -relief sunken"),

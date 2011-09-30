@@ -63,6 +63,11 @@ static SLPlayItf bqPlayerPlay;
 static SLAndroidSimpleBufferQueueItf bqPlayerBufferQueue;
 //static SLEffectSendItf bqPlayerEffectSend;
 
+// recorder interfaces
+static SLObjectItf recorderObject = NULL;
+static SLRecordItf recorderRecord;
+static SLAndroidSimpleBufferQueueItf recorderBufferQueue;
+
 
 Audio_t*
 getaudiodev(void)
@@ -112,36 +117,77 @@ audio_file_open(Chan *c, int omode)
 {
 	SLresult result;
 
-	// configure audio source
-	SLDataLocator_AndroidSimpleBufferQueue loc_bufq = {SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2};
-	SLDataFormat_PCM format_pcm = {SL_DATAFORMAT_PCM, 1, SL_SAMPLINGRATE_44_1,
-		SL_PCMSAMPLEFORMAT_FIXED_16, SL_PCMSAMPLEFORMAT_FIXED_16,
-		SL_SPEAKER_FRONT_CENTER, SL_BYTEORDER_LITTLEENDIAN};
-	SLDataSource audioSrc = {&loc_bufq, &format_pcm};
+//	DPRINT("opened mode %o\n", omode);
 
-	// configure audio sink
-	SLDataLocator_OutputMix loc_outmix = {SL_DATALOCATOR_OUTPUTMIX, outputMixObject};
-	SLDataSink audioSnk = {&loc_outmix, NULL};
-
-	// create audio player
-	const SLInterfaceID ids[1] = {SL_IID_BUFFERQUEUE};
-	const SLboolean req[1] = {SL_BOOLEAN_TRUE};
-	result = (*engineEngine)->CreateAudioPlayer(engineEngine, &bqPlayerObject, &audioSrc, &audioSnk,
-			1, ids, req);
-	assert(SL_RESULT_SUCCESS == result);
-
-	// realize the player
-	result = (*bqPlayerObject)->Realize(bqPlayerObject, SL_BOOLEAN_FALSE);
-	assert(SL_RESULT_SUCCESS == result);
-
-	// get the play interface
-	result = (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_PLAY, &bqPlayerPlay);
-	assert(SL_RESULT_SUCCESS == result);
-
-	// get the buffer queue interface
-	result = (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_BUFFERQUEUE,
-			&bqPlayerBufferQueue);
-	assert(SL_RESULT_SUCCESS == result);
+	if (omode == OWRITE || omode == ORDWR) {
+		// configure audio source
+		SLDataLocator_AndroidSimpleBufferQueue loc_bufq = {SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2};
+		SLDataFormat_PCM format_pcm = {SL_DATAFORMAT_PCM, 1, SL_SAMPLINGRATE_44_1,
+			SL_PCMSAMPLEFORMAT_FIXED_16, SL_PCMSAMPLEFORMAT_FIXED_16,
+			SL_SPEAKER_FRONT_CENTER, SL_BYTEORDER_LITTLEENDIAN};
+		SLDataSource audioSrc = {&loc_bufq, &format_pcm};
+	
+		// configure audio sink
+		SLDataLocator_OutputMix loc_outmix = {SL_DATALOCATOR_OUTPUTMIX, outputMixObject};
+		SLDataSink audioSnk = {&loc_outmix, NULL};
+	
+		// create audio player
+		const SLInterfaceID ids[1] = {SL_IID_BUFFERQUEUE};
+		const SLboolean req[1] = {SL_BOOLEAN_TRUE};
+		result = (*engineEngine)->CreateAudioPlayer(engineEngine, &bqPlayerObject, &audioSrc, &audioSnk,
+				1, ids, req);
+		assert(SL_RESULT_SUCCESS == result);
+	
+		// realize the player
+		result = (*bqPlayerObject)->Realize(bqPlayerObject, SL_BOOLEAN_FALSE);
+		assert(SL_RESULT_SUCCESS == result);
+	
+		// get the play interface
+		result = (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_PLAY, &bqPlayerPlay);
+		assert(SL_RESULT_SUCCESS == result);
+	
+		// get the buffer queue interface
+		result = (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_BUFFERQUEUE,
+				&bqPlayerBufferQueue);
+		assert(SL_RESULT_SUCCESS == result);
+	} else if (omode == OREAD || omode == ORDWR) {
+		// configure audio source
+		SLDataLocator_IODevice loc_dev = {SL_DATALOCATOR_IODEVICE, SL_IODEVICE_AUDIOINPUT,
+				SL_DEFAULTDEVICEID_AUDIOINPUT, NULL};
+		SLDataSource audioSrc = {&loc_dev, NULL};
+	
+		// configure audio sink
+		SLDataLocator_AndroidSimpleBufferQueue loc_bq = {SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 1};
+		SLDataFormat_PCM format_pcm = {SL_DATAFORMAT_PCM, 1, SL_SAMPLINGRATE_16,
+			SL_PCMSAMPLEFORMAT_FIXED_16, SL_PCMSAMPLEFORMAT_FIXED_16,
+			SL_SPEAKER_FRONT_CENTER, SL_BYTEORDER_LITTLEENDIAN};
+		SLDataSink audioSnk = {&loc_bq, &format_pcm};
+	
+		// create audio recorder
+		// (requires the RECORD_AUDIO permission)
+		const SLInterfaceID id[1] = {SL_IID_ANDROIDSIMPLEBUFFERQUEUE};
+		const SLboolean req[1] = {SL_BOOLEAN_TRUE};
+		result = (*engineEngine)->CreateAudioRecorder(engineEngine, &recorderObject, &audioSrc,
+				&audioSnk, 1, id, req);
+		if (SL_RESULT_SUCCESS != result) {
+			return;
+		}
+	
+		// realize the audio recorder
+		result = (*recorderObject)->Realize(recorderObject, SL_BOOLEAN_FALSE);
+		if (SL_RESULT_SUCCESS != result) {
+			return;
+		}
+	
+		// get the record interface
+		result = (*recorderObject)->GetInterface(recorderObject, SL_IID_RECORD, &recorderRecord);
+		assert(SL_RESULT_SUCCESS == result);
+	
+		// get the buffer queue interface
+		result = (*recorderObject)->GetInterface(recorderObject, SL_IID_ANDROIDSIMPLEBUFFERQUEUE,
+				&recorderBufferQueue);
+		assert(SL_RESULT_SUCCESS == result);
+	}
 }
 
 void    
@@ -160,45 +206,85 @@ audio_file_close(Chan *c)
 long
 audio_file_read(Chan *c, void *va, long count, vlong offset)
 {
-	long ba, status, chunk, total;
+	SLresult result;
+	SLBufferQueueState state;
 
-	USED(c);
-	USED(offset);
-	DPRINT("audio_file_read %d %d\n", afd.data, afd.ctl);
-	qlock(&inlock);
-	if(waserror()){
-		qunlock(&inlock);
-		nexterror();
+	//DPRINT("in audio_file_read, count = %d\n", count);
+
+	// in case already recording, stop recording and clear buffer queue
+	result = (*recorderRecord)->SetRecordState(recorderRecord, SL_RECORDSTATE_STOPPED);
+	assert(SL_RESULT_SUCCESS == result);
+	result = (*recorderBufferQueue)->Clear(recorderBufferQueue);
+	assert(SL_RESULT_SUCCESS == result);
+
+	// the buffer is not valid for playback yet
+	//recorderSize = 0;
+
+	// enqueue an empty buffer to be filled by the recorder
+	// (for streaming recording, we would enqueue at least 2 empty buffers to start things off)
+	result = (*recorderBufferQueue)->Enqueue(recorderBufferQueue, va,
+			count);
+	// the most likely other result is SL_RESULT_BUFFER_INSUFFICIENT,
+	// which for this code example would indicate a programming error
+	assert(SL_RESULT_SUCCESS == result);
+
+	// start recording
+	result = (*recorderRecord)->SetRecordState(recorderRecord, SL_RECORDSTATE_RECORDING);
+	assert(SL_RESULT_SUCCESS == result);
+
+	result = (*recorderBufferQueue)->GetState(recorderBufferQueue, &state);
+
+	//DPRINT("state.count = %d\n", state.count);
+
+	while (state.count)
+	{
+		(*recorderBufferQueue)->GetState(recorderBufferQueue, &state);
+		//DPRINT("state.count = %d\n", state.count);
 	}
 
-	if(afd.data < 0)
-		error(Eperm);
+	result = (*recorderRecord)->SetRecordState(recorderRecord, SL_RECORDSTATE_STOPPED);
 
-	/* check block alignment */
-	ba = av.in.bits * av.in.chan / Bits_Per_Byte;
-
-	if(count % ba)
-		error(Ebadarg);
-		
-	if(!audio_pause(afd.data, A_UnPause))
-		error(Eio);
-	
-	total = 0;
-	while(total < count){
-		chunk = count - total;
-		status = read (afd.data, va + total, chunk);
-		if(status < 0)
-			error(Eio);
-		total += status;
-	}
-	
-	if(total != count)
-		error(Eio);
-
-	poperror();
-	qunlock(&inlock);
-	
 	return count;
+	
+//	long ba, status, chunk, total;
+//
+//	USED(c);
+//	USED(offset);
+//	DPRINT("audio_file_read %d %d\n", afd.data, afd.ctl);
+//	qlock(&inlock);
+//	if(waserror()){
+//		qunlock(&inlock);
+//		nexterror();
+//	}
+//
+//	if(afd.data < 0)
+//		error(Eperm);
+//
+//	/* check block alignment */
+//	ba = av.in.bits * av.in.chan / Bits_Per_Byte;
+//
+//	if(count % ba)
+//		error(Ebadarg);
+//		
+//	if(!audio_pause(afd.data, A_UnPause))
+//		error(Eio);
+//	
+//	total = 0;
+//	while(total < count){
+//		chunk = count - total;
+//		status = read (afd.data, va + total, chunk);
+//		if(status < 0)
+//			error(Eio);
+//		total += status;
+//	}
+//	
+//	if(total != count)
+//		error(Eio);
+//
+//	poperror();
+//	qunlock(&inlock);
+//	
+//	return count;
 }
 
 long                                            
