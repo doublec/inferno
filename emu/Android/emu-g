@@ -25,6 +25,7 @@ dev
 	audio	audio-android
 	mem
 	phone
+	wifi
 
 lib
 	interp
