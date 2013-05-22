@@ -1,0 +1,4 @@
+mkdir -p `cat empties`
+chmod 555 mnt/* n/client/* n/*
+chmod 755 n/client
+chmod 555 prof 
