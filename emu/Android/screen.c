@@ -186,14 +186,14 @@ touchscreens(struct input_event* ev, int count)
 			break;
 		case 0x36:		// ABS_MT_POSITION_X
 			if(!rotation_opt) {
-				if ((ev[i].value * 800 / 1024) > lowy)
-					y = (ev[i].value * 800 /1024) - yadjust;
+				if ((ev[i].value * 800 / 950) > lowy)
+					y = (ev[i].value * 800 /950) - yadjust;
 				else
 					y = ymin;
 				break;
 			} else {
-				if ((ev[i].value * 800 / 1024) > lowx)
-					x = (ev[i].value * 800 / 1024) - xadjust;
+				if ((ev[i].value * 800 / 950) > lowx)
+					x = (ev[i].value * 800 / 950) - xadjust;
 				else
 					x = xmin;
 				break;
@@ -219,6 +219,7 @@ touchscreens(struct input_event* ev, int count)
 	    break;
 	case EV_SYN:
 		mousetrack(b, x, y, 0);
+                b = 0;
 		return;
 	}
     }
@@ -254,7 +255,7 @@ readbutton(void* v)
 		}
 
 		for (i = 0; i < rd / size; i++) {
-			//print("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
+		  //printf("ev[%d]: type = 0x%x, code = 0x%x, value = 0x%x\n", i, ev[i].type, ev[i].code, ev[i].value);
 			if (ev[i].code == 0x74) {
 				if (ev[i].value == 1) {
 					powerbuttonpress = 1;

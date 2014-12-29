@@ -57,7 +57,9 @@ wifiinit(void)
 
 	if (pid == 0) {
 		chdir("/data/misc/wifi");
-		execl("/system/bin/wpa_supplicant", "wpa_supplicant", "-D", "wext", "-i", "eth0", "-c", "/data/misc/wifi/wpa_supplicant.conf", NULL);
+		//		execl("/system/bin/wpa_supplicant", "wpa_supplicant", "-D", "wext", "-i", "eth0", "-c", "/data/misc/wifi/wpa_supplicant.conf", NULL);
+		execl("/system/bin/start", "start", "wpa_supplicant", NULL);
+		//		execl("/system/bin/netcfg", "netcfg", "wlan0", "dhcp", NULL);
 	}
 //	kproc("phone", loop_for_data, 0, 0);
 }

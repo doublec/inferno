@@ -287,18 +287,17 @@ main(int argc, char *argv[])
 	} else if (!strncmp(device, "crespo", 6)) {
 		type = 's';
 		system("cp /data/inferno/etc/buttonserver-nexus-s.cfg /data/inferno/etc/buttonserver.cfg");
-		eventfiles = malloc(7*sizeof(char *));
-		eventfiles[0] = "/dev/input/event0";
-		eventfiles[1] = "/dev/input/event1";
-		eventfiles[2] = "/dev/input/event2";
-		eventfiles[3] = "/dev/input/event3";
-		eventfiles[4] = "/dev/input/event4";
-		eventfiles[5] = "/dev/input/event5";
-		eventfiles[6] = NULL;
+		eventfiles = malloc(6*sizeof(char *));
+		eventfiles[0] = "/dev/input/event0"; // mxt224_ts_imput
+		eventfiles[1] = "/dev/input/event1"; // gyro
+		eventfiles[2] = "/dev/input/event2"; // herring-keypad (72,73,84)
+		eventfiles[3] = "/dev/input/event3"; // proximity
+		eventfiles[4] = "/dev/input/event4"; // lightsensor-level
+		eventfiles[5] = NULL;
 		displaydepth = 32;
 		geom("480x800");
 		mousefile = "/dev/input/event0";
-		homedevice = "/dev/input/event5";
+		homedevice = "/dev/input/event2";
 		voldevice = "/dev/input/event2";
 		maineventnum = 2;
 		system("echo \"on\" > /sys/power/state");

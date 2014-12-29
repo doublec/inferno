@@ -78,6 +78,7 @@ getaudiodev(void)
 void 
 audio_file_init(void)
 {
+#if 0
 	/* Let's try this SLES junk */
 	SLresult result;
 
@@ -109,12 +110,14 @@ audio_file_init(void)
 			&outputMixVolume);
 
 	audio_info_init(&av);
+#endif
 }
 
 
 void
 audio_file_open(Chan *c, int omode)
 {
+#if 0
 	SLresult result;
 
 //	DPRINT("opened mode %o\n", omode);
@@ -188,11 +191,13 @@ audio_file_open(Chan *c, int omode)
 				&recorderBufferQueue);
 		assert(SL_RESULT_SUCCESS == result);
 	}
+#endif
 }
 
 void    
 audio_file_close(Chan *c)
 {
+#if 0
 	// Destroy the buffer queue object
 	if (bqPlayerObject != NULL) {
 		(*bqPlayerObject)->Destroy(bqPlayerObject);
@@ -201,11 +206,13 @@ audio_file_close(Chan *c)
 		bqPlayerBufferQueue = NULL;
 		//bqPlayerEffectSend = NULL;
 	}
+#endif
 }
 
 long
 audio_file_read(Chan *c, void *va, long count, vlong offset)
 {
+#if 0
 	SLresult result;
 	SLBufferQueueState state;
 
@@ -285,11 +292,14 @@ audio_file_read(Chan *c, void *va, long count, vlong offset)
 //	qunlock(&inlock);
 //	
 //	return count;
+#endif
+  return -1;
 }
 
 long                                            
 audio_file_write(Chan *c, void *va, long count, vlong offset)
 {
+#if 0
 	SLresult result;
 	SLBufferQueueState state;
 
@@ -351,11 +361,14 @@ audio_file_write(Chan *c, void *va, long count, vlong offset)
 //	qunlock(&outlock);
 //
 //	return count;	
+#endif
+  return -1;
 }
 
 long
 audio_ctl_write(Chan *c, void *va, long count, vlong offset)
 {
+#if 0
 	Audio_t tmpav = av;
 	int tfd;
 
@@ -413,6 +426,8 @@ audio_ctl_write(Chan *c, void *va, long count, vlong offset)
 	poperror();
 	qunlock(&inlock);
 	return count;
+#endif
+  return -1;
 }
 
 /* Linux/OSS specific stuff */

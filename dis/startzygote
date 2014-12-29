@@ -1,8 +1,12 @@
 #!/dis/sh
 load std
 
-os /system/bin/stop inferno
-os /system/bin/stop media-inferno
-os /system/bin/start media
-os /system/bin/start zygote
-os /system/xbin/killall emu-g
+#os /system/bin/stop inferno
+#os /system/bin/stop media-inferno
+#os /system/bin/start media
+#os /system/bin/start surfaceflinger
+#os /system/bin/start bootanim
+#os /system/bin/start zygote
+#os /system/xbin/killall emu-g
+os /system/bin/setprop inferno.enabled 0
+shutdown -h

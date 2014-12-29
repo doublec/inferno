@@ -57,7 +57,7 @@
   /*                                                                    */
   /**********************************************************************/
 
-
+#include <stddef.h>
 #include <lib9.h>
 #define UINT_MAX	0xffffffffU
 #define ULONG_MAX	0xffffffffUL

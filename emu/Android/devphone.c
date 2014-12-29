@@ -33,6 +33,7 @@
 #define RESPONSE_UNSOLICITED 1
 #define POWER_ON 2000
 #define POWER_OFF 2001
+#define RIL_REQUEST_REGISTRATION_STATE 20
 
 // Inferno-related globals
 
@@ -136,6 +137,7 @@ status_ready(void *unused)
 void
 phoneinit(void)
 {
+#if 0
 	af_handle = dlopen("libinfernoaudio.so", RTLD_NOW);
 	if(af_handle == NULL) {
 		fprintf(stderr, "opening libinfernoaudio.so failed: %s\n",
@@ -151,7 +153,7 @@ phoneinit(void)
 	}
 
 	af_setMode(MODE_NORMAL);
-
+#endif
 	calls.cs = NULL;
 	calls.num = 0;
 	calls.ready = 0;
@@ -388,6 +390,7 @@ phonewrite(Chan *c, void *va, long n, vlong offset)
 			set_mute(0);
 		} else if(strcmp(cmd->f[0], "route") == 0) {
 			if(cmd->nf >= 2) {
+#if 0
 				if(strcmp(cmd->f[1], "earpiece") == 0) {
 					af_setParameters("routing=1");
 				} else if(strcmp(cmd->f[1], "speaker") == 0) {
@@ -395,9 +398,11 @@ phonewrite(Chan *c, void *va, long n, vlong offset)
 				} else if(strcmp(cmd->f[1], "headphone") == 0) {
 					af_setParameters("routing=3");
 				}
+#endif
 			}
 		} else if(strcmp(cmd->f[0], "volume") == 0) {
 			if(cmd->nf >= 2) {
+#if 0
 				switch(strtol(cmd->f[1], NULL, 10)) {
 				case 0: af_setVoiceVolume(0.0); break;
 				case 1: af_setVoiceVolume(0.2); break;
@@ -407,6 +412,7 @@ phonewrite(Chan *c, void *va, long n, vlong offset)
 				case 5: af_setVoiceVolume(1.0); break;
 				default: af_setVoiceVolume(1.0); break;
 				}
+#endif
 			}
 		}
 		break;
@@ -594,7 +600,9 @@ handle_sol_response(struct parcel *p)
 		break;
 	case POWER_OFF:
 		power_state = 0;
+#if 0
 		af_setMode(MODE_NORMAL);
+#endif
 		break;
 	case RIL_REQUEST_REGISTRATION_STATE:
 		if(!parcel_data_avail(p)) return;
@@ -814,10 +822,11 @@ dial(char *number)
 	struct parcel p;
 	struct mixer *mixer;
 	struct mixer_ctl *ctl;
-
+#if 0
 	af_setMode(MODE_IN_CALL); // tell audioflinger we want to start a call
 	af_setParameters("routing=1"); // tell AF where to route sound
 	af_setVoiceVolume(1.0f);
+#endif
 	set_mute(0);
 
 	parcel_init(&p);
