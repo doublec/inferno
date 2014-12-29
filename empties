@@ -74,6 +74,7 @@
 ./n/rdbg
 ./n/registry
 ./n/remote
+./prof
 ./services/logs
 ./services/ppp
 ./src
