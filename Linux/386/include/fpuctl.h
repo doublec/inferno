@@ -6,12 +6,12 @@
 static void
 setfcr(ulong fcr)
 {
-	__asm__(	"xorb	$0x3f, %%al\n\t"
+	__asm__ volatile("xorb	$0x3f, %%al\n\t"
 			"pushw	%%ax\n\t"
 			"fwait\n\t"
 			"fldcw	(%%esp)\n\t"
 			"popw	%%ax\n\t"
-			: /* no output */
+			: "=a" (fcr)
 			: "al" (fcr)
 	);
 }
