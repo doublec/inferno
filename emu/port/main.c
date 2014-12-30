@@ -20,6 +20,7 @@ extern	int	mflag;
 	char	*eve;
 	int	Xsize	= 640;
 	int	Ysize	= 480;
+	int	fullscreen = 0;
 	int	bflag = 1;
 	int	sflag;
 	int	qflag;
@@ -32,6 +33,7 @@ usage(void)
 {
 	fprint(2, "Usage: emu [options...] [file.dis [args...]]\n"
 		"\t-gXxY\n"
+		"\t-F\n"
 		"\t-c[0-9]\n"
 		"\t-d file.dis\n"
 		"\t-s\n"
@@ -124,6 +126,9 @@ option(int argc, char *argv[], void (*badusage)(void))
 	case 'g':		/* Window geometry */
 		if (geom(EARGF(badusage())) == 0)
 			badusage();
+		break;
+	case 'F':
+		fullscreen = 1;
 		break;
 	case 'b':		/* jit array bounds checking (obsolete, now on by default) */
 		break;

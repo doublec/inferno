@@ -232,11 +232,6 @@ attachscreen(Rectangle *r, ulong *chan, int *d, int *width, int *softscreen)
 
 	Xsize &= ~0x3;	/* ensure multiple of 4 */
 
-	r->min.x = 0;
-	r->min.y = 0;
-	r->max.x = Xsize;
-	r->max.y = Ysize;
-
 	if(!triedscreen){
 		xinitscreen(Xsize, Ysize, displaychan, chan, d);
 		/*
@@ -248,6 +243,11 @@ attachscreen(Rectangle *r, ulong *chan, int *d, int *width, int *softscreen)
 		*chan = displaychan;
 		*d = displaydepth;
 	}
+
+	r->min.x = 0;
+	r->min.y = 0;
+	r->max.x = Xsize;
+	r->max.y = Ysize;
 
 	*width = (Xsize/4)*(*d/8);
 	*softscreen = 1;
@@ -839,6 +839,14 @@ xinitscreen(int xsize, int ysize, ulong reqchan, ulong *chan, int *d)
 	screen = DefaultScreenOfDisplay(xdisplay);
 	xcmap = DefaultColormapOfScreen(screen);
 
+	if (fullscreen) {
+		Xsize = XWidthOfScreen(screen) & ~0x3; /* ensure multiple of 4 */
+		Ysize = XHeightOfScreen(screen);
+	}
+
+        xsize = Xsize;
+        ysize = Ysize;
+
 	if(reqchan == 0){
 		*chan = 0;
 		if(xscreendepth <= 16){	/* try for better colour */
@@ -915,6 +923,21 @@ xinitscreen(int xsize, int ysize, ulong reqchan, ulong *chan, int *d)
 		&normalhints,		/* XA_WM_NORMAL_HINTS */
 		&hints,			/* XA_WM_HINTS */
 		&classhints);		/* XA_WM_CLASS */
+
+	if(fullscreen) {
+		Atom fs, state;
+		XEvent xev;
+		fs = XInternAtom ( xdisplay, "_NET_WM_STATE_FULLSCREEN", True );
+		state = XInternAtom ( xdisplay, "_NET_WM_STATE", True );
+		memset(&xev, 0, sizeof(xev));
+		xev.type                 = ClientMessage;
+		xev.xclient.window       = xdrawable;
+		xev.xclient.message_type = state;
+		xev.xclient.format       = 32;
+		xev.xclient.data.l[0]    = 1;
+		xev.xclient.data.l[1]    = fs;
+		XSendEvent(xdisplay, rootwin, False, SubstructureNotifyMask, &xev);
+	}
 
 	XMapWindow(xdisplay, xdrawable);
 	XFlush(xdisplay);
