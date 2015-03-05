@@ -9,12 +9,12 @@ AR=		ar
 ARFLAGS=	ruvs
 A=		a
 
-AS=		gcc -c -arch i386 -m32
+AS=		llvm-gcc -c -arch i386 -m32
 ASFLAGS=
 
 ISYSROOT=	-isysroot /Developer/SDKs/MacOSX10.6.sdk
 
-CC=		gcc -c -m32
+CC=		llvm-gcc -c -m32
 COPTFLAGS=	-Os
 CDEBUGFLAGS=
 CTHREADFLAGS=
@@ -23,13 +23,11 @@ CFLAGS= 	-arch i386 -m32\
 		-Wno-deprecated-declarations -Wuninitialized -Wunused -Wreturn-type -Wimplicit -Wno-four-char-constants -Wno-unknown-pragmas\
 		-pipe\
 		-fno-strict-aliasing\
-		-no-cpp-precomp\
-		-mno-fused-madd\
 		-I$ROOT/MacOSX/386/include\
 		-I$ROOT/include\
 		$COPTFLAGS $CDEBUGFLAGS\
 
-LD=		gcc -arch i386 -m32
+LD=		llvm-gcc -arch i386 -m32
 LDFLAGS=\
 		-mmacosx-version-min=10.4\
 		-multiply_defined suppress
