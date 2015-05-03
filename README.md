@@ -105,15 +105,3 @@ Some places to get further information on Inferno
 * My [articles about Inferno](http://bluishcoder.co.nz/tags/inferno/)
 
 This repository is set up mainly to make it easier for me to tinker with Inferno on Android and Linux desktop and I'm sharing it in case others find it useful. For the official work on Inferno and the official source see [inferno-os.org](http://inferno-os.org).
-
-
-
-
-
-
-
-    
-
-
-
- 
